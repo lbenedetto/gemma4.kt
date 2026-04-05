@@ -31,6 +31,7 @@ import java.lang.reflect.Field;
 
 import java.io.IOException;
 import java.io.PrintStream;
+import java.io.BufferedInputStream;
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.ValueLayout;
@@ -38,6 +39,8 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 import java.nio.channels.FileChannel;
+import java.nio.channels.Channels;
+import java.nio.channels.ReadableByteChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -77,109 +80,11 @@ final class GGUF {
         return tensorInfos;
     }
 
-    private static final class ChannelReader {
-        private final FileChannel channel;
-        private final ByteBuffer buffer;
-        private long position;
-
-        ChannelReader(FileChannel channel, int capacity) throws IOException {
-            this.channel = channel;
-            this.buffer = ByteBuffer.allocate(capacity).order(ByteOrder.LITTLE_ENDIAN);
-            this.buffer.limit(0);
-            this.position = channel.position();
-        }
-
-        long position() {
-            return position;
-        }
-
-        void skip(int length) throws IOException {
-            if (length < 0) {
-                throw new IllegalArgumentException("length < 0");
-            }
-            int remaining = length;
-            while (remaining > 0) {
-                if (!buffer.hasRemaining()) {
-                    refillAtLeast(1);
-                }
-                int chunk = Math.min(remaining, buffer.remaining());
-                buffer.position(buffer.position() + chunk);
-                position += chunk;
-                remaining -= chunk;
-            }
-        }
-
-        byte[] readBytes(int length) throws IOException {
-            if (length < 0) {
-                throw new IllegalArgumentException("length < 0");
-            }
-            byte[] out = new byte[length];
-            int offset = 0;
-            while (offset < length) {
-                if (!buffer.hasRemaining()) {
-                    refillAtLeast(1);
-                }
-                int chunk = Math.min(length - offset, buffer.remaining());
-                buffer.get(out, offset, chunk);
-                position += chunk;
-                offset += chunk;
-            }
-            return out;
-        }
-
-        boolean readBoolean() throws IOException {
-            return readByte() != 0;
-        }
-
-        byte readByte() throws IOException {
-            refillAtLeast(1);
-            position += Byte.BYTES;
-            return buffer.get();
-        }
-
-        short readShort() throws IOException {
-            refillAtLeast(Short.BYTES);
-            position += Short.BYTES;
-            return buffer.getShort();
-        }
-
-        int readInt() throws IOException {
-            refillAtLeast(Integer.BYTES);
-            position += Integer.BYTES;
-            return buffer.getInt();
-        }
-
-        long readLong() throws IOException {
-            refillAtLeast(Long.BYTES);
-            position += Long.BYTES;
-            return buffer.getLong();
-        }
-
-        float readFloat() throws IOException {
-            return Float.intBitsToFloat(readInt());
-        }
-
-        double readDouble() throws IOException {
-            return Double.longBitsToDouble(readLong());
-        }
-
-        private void refillAtLeast(int minBytes) throws IOException {
-            if (minBytes > buffer.capacity()) {
-                throw new IllegalArgumentException("minBytes > buffer capacity");
-            }
-            if (buffer.remaining() >= minBytes) {
-                return;
-            }
-            buffer.compact();
-            while (buffer.position() < minBytes) {
-                int read = channel.read(buffer);
-                if (read < 0) {
-                    throw new IOException("Unexpected EOF while reading GGUF metadata");
-                }
-            }
-            buffer.flip();
-        }
-    }
+    private final ByteBuffer BB_1 = ByteBuffer.allocate(Byte.BYTES).order(ByteOrder.LITTLE_ENDIAN);
+    private final ByteBuffer BB_2 = ByteBuffer.allocate(Short.BYTES).order(ByteOrder.LITTLE_ENDIAN);
+    private final ByteBuffer BB_4 = ByteBuffer.allocate(Integer.BYTES).order(ByteOrder.LITTLE_ENDIAN);
+    private final ByteBuffer BB_8 = ByteBuffer.allocate(Long.BYTES).order(ByteOrder.LITTLE_ENDIAN);
+    private long parsePosition;
 
     public static Map<String, GGMLTensorEntry> loadTensors(FileChannel fileChannel, long tensorDataOffset, Map<String, GGUFTensorInfo> tensorInfos) throws IOException {
         Arena arena = Arena.global();
@@ -205,7 +110,11 @@ final class GGUF {
         try (var ignored = Timer.log("Parse " + modelLabel)) {
             fileChannel.position(0L);
             GGUF gguf = new GGUF();
-            gguf.loadModelImpl(new ChannelReader(fileChannel, PARSE_BUFFER_SIZE));
+            ReadableByteChannel channel = Channels.newChannel(
+                    new BufferedInputStream(Channels.newInputStream(fileChannel), PARSE_BUFFER_SIZE)
+            );
+            gguf.parsePosition = 0L;
+            gguf.loadModelImpl(channel);
             return gguf;
         }
     }
@@ -220,126 +129,126 @@ final class GGUF {
         }
     }
 
-    private void loadModelImpl(ChannelReader reader) throws IOException {
-        readHeader(reader);
+    private void loadModelImpl(ReadableByteChannel channel) throws IOException {
+        readHeader(channel);
         this.tensorInfos = HashMap.newHashMap(tensorCount);
         for (int i = 0; i < tensorCount; ++i) {
-            GGUF.GGUFTensorInfo ti = readTensorInfo(reader);
+            GGUF.GGUFTensorInfo ti = readTensorInfo(channel);
             assert !tensorInfos.containsKey(ti.name);
             tensorInfos.put(ti.name, ti);
         }
-        long position = reader.position();
+        long position = parsePosition;
         int padding = (int) ((getAlignment() - (position % getAlignment())) % getAlignment());
-        reader.skip(padding);
-        this.tensorDataOffset = reader.position();
+        skipBytes(channel, padding);
+        this.tensorDataOffset = parsePosition;
     }
 
     public record GGUFTensorInfo(String name, int[] dimensions, GGMLType ggmlType, long offset) {
     }
 
-    private GGMLType readGGMLType(ChannelReader reader) throws IOException {
-        int ggmlTypeId = reader.readInt();
+    private GGMLType readGGMLType(ReadableByteChannel channel) throws IOException {
+        int ggmlTypeId = readInt(channel);
         return GGMLType.fromId(ggmlTypeId);
     }
 
-    private GGUF.GGUFTensorInfo readTensorInfo(ChannelReader reader) throws IOException {
-        String name = readString(reader);
+    private GGUF.GGUFTensorInfo readTensorInfo(ReadableByteChannel channel) throws IOException {
+        String name = readString(channel);
         assert name.length() <= 64;
-        int n_dimensions = reader.readInt();
+        int n_dimensions = readInt(channel);
         assert n_dimensions <= 4;
         int[] dimensions = new int[n_dimensions];
         for (int i = 0; i < n_dimensions; ++i) {
-            dimensions[i] = Math.toIntExact(reader.readLong());
+            dimensions[i] = Math.toIntExact(readLong(channel));
         }
-        GGMLType ggmlType = readGGMLType(reader);
-        long offset = reader.readLong();
+        GGMLType ggmlType = readGGMLType(channel);
+        long offset = readLong(channel);
         assert offset % getAlignment() == 0;
         return new GGUF.GGUFTensorInfo(name, dimensions, ggmlType, offset);
     }
 
-    private String readString(ChannelReader reader) throws IOException {
-        int len = Math.toIntExact(reader.readLong());
-        return new String(reader.readBytes(len), StandardCharsets.UTF_8);
+    private String readString(ReadableByteChannel channel) throws IOException {
+        int len = Math.toIntExact(readLong(channel));
+        return new String(readBytes(channel, len), StandardCharsets.UTF_8);
     }
 
-    private Pair<String, Object> readKeyValuePair(ChannelReader reader) throws IOException {
-        String key = readString(reader);
+    private Pair<String, Object> readKeyValuePair(ReadableByteChannel channel) throws IOException {
+        String key = readString(channel);
         assert key.length() < (1 << 16);
         assert key.codePoints().allMatch(cp -> ('a' <= cp && cp <= 'z') || ('0' <= cp && cp <= '9') || cp == '_' || cp == '.');
-        Object value = readMetadataValue(reader);
+        Object value = readMetadataValue(channel);
         return new Pair<>(key, value);
     }
 
-    private Object readMetadataValue(ChannelReader reader) throws IOException {
-        MetadataValueType valueType = readMetadataValueType(reader);
-        return readMetadataValueOfType(valueType, reader);
+    private Object readMetadataValue(ReadableByteChannel channel) throws IOException {
+        MetadataValueType valueType = readMetadataValueType(channel);
+        return readMetadataValueOfType(valueType, channel);
     }
 
-    void readHeader(ChannelReader reader) throws IOException {
-        this.magic = reader.readInt();
+    void readHeader(ReadableByteChannel channel) throws IOException {
+        this.magic = readInt(channel);
         if (magic != GGUF_MAGIC) {
             throw new IllegalArgumentException("unsupported header.magic " + magic);
         }
-        this.version = reader.readInt();
+        this.version = readInt(channel);
         if (!SUPPORTED_GGUF_VERSIONS.contains(version)) {
             throw new IllegalArgumentException("unsupported header.version " + version);
         }
-        this.tensorCount = Math.toIntExact(reader.readLong());
-        this.metadata_kv_count = Math.toIntExact(reader.readLong());
+        this.tensorCount = Math.toIntExact(readLong(channel));
+        this.metadata_kv_count = Math.toIntExact(readLong(channel));
         this.metadata = HashMap.newHashMap(metadata_kv_count);
         for (int i = 0; i < metadata_kv_count; ++i) {
-            Pair<String, Object> keyValue = readKeyValuePair(reader);
+            Pair<String, Object> keyValue = readKeyValuePair(channel);
             assert !metadata.containsKey(keyValue.first());
             metadata.put(keyValue.first(), keyValue.second());
         }
     }
 
-    private Object readArray(ChannelReader reader) throws IOException {
-        MetadataValueType valueType = readMetadataValueType(reader);
-        int len = Math.toIntExact(reader.readLong());
+    private Object readArray(ReadableByteChannel channel) throws IOException {
+        MetadataValueType valueType = readMetadataValueType(channel);
+        int len = Math.toIntExact(readLong(channel));
         switch (valueType) {
             case UINT8, INT8 -> {
-                return reader.readBytes(len);
+                return readBytes(channel, len);
             }
             case UINT16, INT16 -> {
                 short[] shorts = new short[len];
                 for (int i = 0; i < len; ++i) {
-                    shorts[i] = reader.readShort();
+                    shorts[i] = readShort(channel);
                 }
                 return shorts;
             }
             case UINT32, INT32 -> {
                 int[] ints = new int[len];
                 for (int i = 0; i < len; ++i) {
-                    ints[i] = reader.readInt();
+                    ints[i] = readInt(channel);
                 }
                 return ints;
             }
             case FLOAT32 -> {
                 float[] floats = new float[len];
                 for (int i = 0; i < len; ++i) {
-                    floats[i] = reader.readFloat();
+                    floats[i] = readFloat(channel);
                 }
                 return floats;
             }
             case BOOL -> {
                 boolean[] booleans = new boolean[len];
                 for (int i = 0; i < len; ++i) {
-                    booleans[i] = reader.readBoolean();
+                    booleans[i] = readBoolean(channel);
                 }
                 return booleans;
             }
             case STRING -> {
                 String[] strings = new String[len];
                 for (int i = 0; i < len; ++i) {
-                    strings[i] = readString(reader);
+                    strings[i] = readString(channel);
                 }
                 return strings;
             }
             case ARRAY -> {
                 Object[] arrays = new Object[len];
                 for (int i = 0; i < len; ++i) {
-                    arrays[i] = readArray(reader);
+                    arrays[i] = readArray(channel);
                 }
                 return arrays;
             }
@@ -347,23 +256,86 @@ final class GGUF {
         }
     }
 
-    private Object readMetadataValueOfType(MetadataValueType valueType, ChannelReader reader) throws IOException {
+    private Object readMetadataValueOfType(MetadataValueType valueType, ReadableByteChannel channel) throws IOException {
         return switch (valueType) {
-            case UINT8, INT8 -> reader.readByte();
-            case UINT16, INT16 -> reader.readShort();
-            case UINT32, INT32 -> reader.readInt();
-            case FLOAT32 -> reader.readFloat();
-            case UINT64, INT64 -> reader.readLong();
-            case FLOAT64 -> reader.readDouble();
-            case BOOL -> reader.readBoolean();
-            case STRING -> readString(reader);
-            case ARRAY -> readArray(reader);
+            case UINT8, INT8 -> readByte(channel);
+            case UINT16, INT16 -> readShort(channel);
+            case UINT32, INT32 -> readInt(channel);
+            case FLOAT32 -> readFloat(channel);
+            case UINT64, INT64 -> readLong(channel);
+            case FLOAT64 -> readDouble(channel);
+            case BOOL -> readBoolean(channel);
+            case STRING -> readString(channel);
+            case ARRAY -> readArray(channel);
         };
     }
 
-    private MetadataValueType readMetadataValueType(ChannelReader reader) throws IOException {
-        int index = reader.readInt();
+    private MetadataValueType readMetadataValueType(ReadableByteChannel channel) throws IOException {
+        int index = readInt(channel);
         return MetadataValueType.fromIndex(index);
+    }
+
+    private byte[] readBytes(ReadableByteChannel channel, int length) throws IOException {
+        byte[] bytes = new byte[length];
+        readFully(channel, ByteBuffer.wrap(bytes));
+        return bytes;
+    }
+
+    private void skipBytes(ReadableByteChannel channel, int length) throws IOException {
+        int remaining = length;
+        byte[] scratch = new byte[Math.min(length, 1 << 12)];
+        while (remaining > 0) {
+            int chunk = Math.min(remaining, scratch.length);
+            readFully(channel, ByteBuffer.wrap(scratch, 0, chunk));
+            remaining -= chunk;
+        }
+    }
+
+    private void readFully(ReadableByteChannel channel, ByteBuffer byteBuffer) throws IOException {
+        int expected = byteBuffer.remaining();
+        while (byteBuffer.hasRemaining()) {
+            int bytesRead = channel.read(byteBuffer);
+            if (bytesRead < 0) {
+                throw new IOException("Unexpected EOF while reading GGUF metadata");
+            }
+        }
+        parsePosition += expected;
+    }
+
+    private byte readByte(ReadableByteChannel channel) throws IOException {
+        BB_1.clear();
+        readFully(channel, BB_1);
+        return BB_1.get(0);
+    }
+
+    private boolean readBoolean(ReadableByteChannel channel) throws IOException {
+        return readByte(channel) != 0;
+    }
+
+    private short readShort(ReadableByteChannel channel) throws IOException {
+        BB_2.clear();
+        readFully(channel, BB_2);
+        return BB_2.getShort(0);
+    }
+
+    private int readInt(ReadableByteChannel channel) throws IOException {
+        BB_4.clear();
+        readFully(channel, BB_4);
+        return BB_4.getInt(0);
+    }
+
+    private long readLong(ReadableByteChannel channel) throws IOException {
+        BB_8.clear();
+        readFully(channel, BB_8);
+        return BB_8.getLong(0);
+    }
+
+    private float readFloat(ReadableByteChannel channel) throws IOException {
+        return Float.intBitsToFloat(readInt(channel));
+    }
+
+    private double readDouble(ReadableByteChannel channel) throws IOException {
+        return Double.longBitsToDouble(readLong(channel));
     }
 
     public int getAlignment() {
