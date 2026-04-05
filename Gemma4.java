@@ -3165,7 +3165,7 @@ public class Gemma4 {
         }
     }
 
-    static final int DEFAULT_MAX_TOKENS = 512;
+    static final int DEFAULT_MAX_TOKENS = 1024;
 
     record Options(Path modelPath, String prompt, String suffix, String systemPrompt, boolean interactive,
                    float temperature, float topp, long seed, int maxTokens, boolean stream, boolean echo) {
@@ -3217,7 +3217,7 @@ public class Gemma4 {
             String prompt = null;
             String suffix = null;
             String systemPrompt = null;
-            float temperature = 0.1f;
+            float temperature = 1f;
             float topp = 0.95f;
             Path modelPath = null;
             long seed = System.nanoTime();
