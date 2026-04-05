@@ -2338,6 +2338,30 @@ final class Q6_KFloatTensor extends FloatTensor {
         }
     }
 
+    private static float fp16ToFloatNoIntrinsic(short h) {
+        int bits = Short.toUnsignedInt(h);
+        int sign = (bits & 0x8000) << 16;
+        int exp = (bits >>> 10) & 0x1F;
+        int mantissa = bits & 0x03FF;
+
+        if (exp == 0) {
+            if (mantissa == 0) {
+                return Float.intBitsToFloat(sign);
+            }
+            int e = 127 - 15 + 1;
+            while ((mantissa & 0x0400) == 0) {
+                mantissa <<= 1;
+                e--;
+            }
+            mantissa &= 0x03FF;
+            return Float.intBitsToFloat(sign | (e << 23) | (mantissa << 13));
+        }
+        if (exp == 0x1F) {
+            return Float.intBitsToFloat(sign | 0x7F80_0000 | (mantissa << 13));
+        }
+        return Float.intBitsToFloat(sign | ((exp + (127 - 15)) << 23) | (mantissa << 13));
+    }
+
     private static float vectorDot(Q6_KFloatTensor thiz, int thisOffset, ArrayFloatTensor that, int thatOffset, int size) {
         float result = 0f;
         int j = 0;
@@ -2357,6 +2381,11 @@ final class Q6_KFloatTensor extends FloatTensor {
             long qlOff = blockOffset;
             long qhOff = blockOffset + 128;
             long scOff = blockOffset + 192;
+            // NOTE: Deliberately avoid Float.float16ToFloat here.
+            // In native-image builds, Graal can lower that intrinsic to VCVTPH2PS with
+            // an illegal high XMM operand under heavy vector register pressure in Q6_K
+            // vectorDot, causing a compile-time crash. Keep this software conversion
+            // until the Graal backend bug is fixed.
             float d = fp16ToFloatNoIntrinsic(readShort(thiz.memorySegment, blockOffset + 208));
 
             for (int h = 0; h < 2; h++) {
