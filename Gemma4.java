@@ -10,7 +10,7 @@
 // Based on Andrej Karpathy's llama2.c and minbpe projects
 // Also please check the sibling project: https://github.com/mukel/llama3.java
 //
-// Supports llama.cpp's GGUF format, quantized models (Q4_0, Q4_1, Q4_K, Q8_0, F16, BF16, F32)
+// Supports llama.cpp's GGUF format, quantized models (Q4_0, Q4_1, Q4_K, Q5_K, Q6_K, Q8_0, F16, BF16, F32)
 // Multi-threaded matrix vector multiplication routines implemented using Java's Vector API
 // Simple CLI with --chat and --instruct mode
 //
