@@ -54,6 +54,7 @@ import java.util.stream.IntStream;
 final class GGUF {
     private static final int GGUF_MAGIC = 0x46554747;
     private static final int DEFAULT_ALIGNMENT = 32; // must be a power of 2
+    private static final int PARSE_BUFFER_SIZE = 1 << 20;
     private static final List<Integer> SUPPORTED_GGUF_VERSIONS = List.of(2, 3);
     private int magic;
     private int version;
@@ -76,10 +77,109 @@ final class GGUF {
         return tensorInfos;
     }
 
-    private final ByteBuffer BB_1 = ByteBuffer.allocate(Byte.BYTES).order(ByteOrder.LITTLE_ENDIAN);
-    private final ByteBuffer BB_2 = ByteBuffer.allocate(Short.BYTES).order(ByteOrder.LITTLE_ENDIAN);
-    private final ByteBuffer BB_4 = ByteBuffer.allocate(Integer.BYTES).order(ByteOrder.LITTLE_ENDIAN);
-    private final ByteBuffer BB_8 = ByteBuffer.allocate(Long.BYTES).order(ByteOrder.LITTLE_ENDIAN);
+    private static final class ChannelReader {
+        private final FileChannel channel;
+        private final ByteBuffer buffer;
+        private long position;
+
+        ChannelReader(FileChannel channel, int capacity) throws IOException {
+            this.channel = channel;
+            this.buffer = ByteBuffer.allocate(capacity).order(ByteOrder.LITTLE_ENDIAN);
+            this.buffer.limit(0);
+            this.position = channel.position();
+        }
+
+        long position() {
+            return position;
+        }
+
+        void skip(int length) throws IOException {
+            if (length < 0) {
+                throw new IllegalArgumentException("length < 0");
+            }
+            int remaining = length;
+            while (remaining > 0) {
+                if (!buffer.hasRemaining()) {
+                    refillAtLeast(1);
+                }
+                int chunk = Math.min(remaining, buffer.remaining());
+                buffer.position(buffer.position() + chunk);
+                position += chunk;
+                remaining -= chunk;
+            }
+        }
+
+        byte[] readBytes(int length) throws IOException {
+            if (length < 0) {
+                throw new IllegalArgumentException("length < 0");
+            }
+            byte[] out = new byte[length];
+            int offset = 0;
+            while (offset < length) {
+                if (!buffer.hasRemaining()) {
+                    refillAtLeast(1);
+                }
+                int chunk = Math.min(length - offset, buffer.remaining());
+                buffer.get(out, offset, chunk);
+                position += chunk;
+                offset += chunk;
+            }
+            return out;
+        }
+
+        boolean readBoolean() throws IOException {
+            return readByte() != 0;
+        }
+
+        byte readByte() throws IOException {
+            refillAtLeast(1);
+            position += Byte.BYTES;
+            return buffer.get();
+        }
+
+        short readShort() throws IOException {
+            refillAtLeast(Short.BYTES);
+            position += Short.BYTES;
+            return buffer.getShort();
+        }
+
+        int readInt() throws IOException {
+            refillAtLeast(Integer.BYTES);
+            position += Integer.BYTES;
+            return buffer.getInt();
+        }
+
+        long readLong() throws IOException {
+            refillAtLeast(Long.BYTES);
+            position += Long.BYTES;
+            return buffer.getLong();
+        }
+
+        float readFloat() throws IOException {
+            return Float.intBitsToFloat(readInt());
+        }
+
+        double readDouble() throws IOException {
+            return Double.longBitsToDouble(readLong());
+        }
+
+        private void refillAtLeast(int minBytes) throws IOException {
+            if (minBytes > buffer.capacity()) {
+                throw new IllegalArgumentException("minBytes > buffer capacity");
+            }
+            if (buffer.remaining() >= minBytes) {
+                return;
+            }
+            buffer.compact();
+            while (buffer.position() < minBytes) {
+                int read = channel.read(buffer);
+                if (read < 0) {
+                    throw new IOException("Unexpected EOF while reading GGUF metadata");
+                }
+            }
+            buffer.flip();
+        }
+    }
 
     public static Map<String, GGMLTensorEntry> loadTensors(FileChannel fileChannel, long tensorDataOffset, Map<String, GGUFTensorInfo> tensorInfos) throws IOException {
         Arena arena = Arena.global();
@@ -96,10 +196,16 @@ final class GGUF {
     }
 
     public static GGUF loadModel(Path modelPath) throws IOException {
-        try (FileChannel fileChannel = FileChannel.open(modelPath);
-             var ignored = Timer.log("Parse " + modelPath)) {
+        try (FileChannel fileChannel = FileChannel.open(modelPath)) {
+            return loadModel(fileChannel, modelPath.toString());
+        }
+    }
+
+    public static GGUF loadModel(FileChannel fileChannel, String modelLabel) throws IOException {
+        try (var ignored = Timer.log("Parse " + modelLabel)) {
+            fileChannel.position(0L);
             GGUF gguf = new GGUF();
-            gguf.loadModelImpl(fileChannel);
+            gguf.loadModelImpl(new ChannelReader(fileChannel, PARSE_BUFFER_SIZE));
             return gguf;
         }
     }
@@ -114,191 +220,149 @@ final class GGUF {
         }
     }
 
-    private void loadModelImpl(FileChannel fileChannel) throws IOException {
-        readHeader(fileChannel);
+    private void loadModelImpl(ChannelReader reader) throws IOException {
+        readHeader(reader);
         this.tensorInfos = HashMap.newHashMap(tensorCount);
         for (int i = 0; i < tensorCount; ++i) {
-            GGUF.GGUFTensorInfo ti = readTensorInfo(fileChannel);
+            GGUF.GGUFTensorInfo ti = readTensorInfo(reader);
             assert !tensorInfos.containsKey(ti.name);
             tensorInfos.put(ti.name, ti);
         }
-        long _padding = getAlignment() - (fileChannel.position() % getAlignment());
-        fileChannel.position(fileChannel.position() + _padding);
-        this.tensorDataOffset = fileChannel.position();
+        long position = reader.position();
+        int padding = (int) ((getAlignment() - (position % getAlignment())) % getAlignment());
+        reader.skip(padding);
+        this.tensorDataOffset = reader.position();
     }
 
     public record GGUFTensorInfo(String name, int[] dimensions, GGMLType ggmlType, long offset) {
     }
 
-    private GGMLType readGGMLType(FileChannel fileChannel) throws IOException {
-        int ggmlTypeId = readInt(fileChannel);
+    private GGMLType readGGMLType(ChannelReader reader) throws IOException {
+        int ggmlTypeId = reader.readInt();
         return GGMLType.fromId(ggmlTypeId);
     }
 
-    private GGUF.GGUFTensorInfo readTensorInfo(FileChannel fileChannel) throws IOException {
-        String name = readString(fileChannel);
+    private GGUF.GGUFTensorInfo readTensorInfo(ChannelReader reader) throws IOException {
+        String name = readString(reader);
         assert name.length() <= 64;
-        int n_dimensions = readInt(fileChannel);
+        int n_dimensions = reader.readInt();
         assert n_dimensions <= 4;
         int[] dimensions = new int[n_dimensions];
         for (int i = 0; i < n_dimensions; ++i) {
-            dimensions[i] = Math.toIntExact(readLong(fileChannel));
+            dimensions[i] = Math.toIntExact(reader.readLong());
         }
-        GGMLType ggmlType = readGGMLType(fileChannel);
-        long offset = readLong(fileChannel);
+        GGMLType ggmlType = readGGMLType(reader);
+        long offset = reader.readLong();
         assert offset % getAlignment() == 0;
         return new GGUF.GGUFTensorInfo(name, dimensions, ggmlType, offset);
     }
 
-    private String readString(FileChannel fileChannel) throws IOException {
-        int len = Math.toIntExact(readLong(fileChannel));
-        byte[] bytes = new byte[len];
-        int bytesRead = fileChannel.read(ByteBuffer.wrap(bytes));
-        assert len == bytesRead;
-        return new String(bytes, StandardCharsets.UTF_8);
+    private String readString(ChannelReader reader) throws IOException {
+        int len = Math.toIntExact(reader.readLong());
+        return new String(reader.readBytes(len), StandardCharsets.UTF_8);
     }
 
-    private Pair<String, Object> readKeyValuePair(FileChannel fileChannel) throws IOException {
-        String key = readString(fileChannel);
+    private Pair<String, Object> readKeyValuePair(ChannelReader reader) throws IOException {
+        String key = readString(reader);
         assert key.length() < (1 << 16);
         assert key.codePoints().allMatch(cp -> ('a' <= cp && cp <= 'z') || ('0' <= cp && cp <= '9') || cp == '_' || cp == '.');
-        Object value = readMetadataValue(fileChannel);
+        Object value = readMetadataValue(reader);
         return new Pair<>(key, value);
     }
 
-    private Object readMetadataValue(FileChannel fileChannel) throws IOException {
-        MetadataValueType value_type = readMetadataValueType(fileChannel);
-        return readMetadataValueOfType(value_type, fileChannel);
+    private Object readMetadataValue(ChannelReader reader) throws IOException {
+        MetadataValueType valueType = readMetadataValueType(reader);
+        return readMetadataValueOfType(valueType, reader);
     }
 
-    void readHeader(FileChannel fileChannel) throws IOException {
-        this.magic = readInt(fileChannel);
+    void readHeader(ChannelReader reader) throws IOException {
+        this.magic = reader.readInt();
         if (magic != GGUF_MAGIC) {
             throw new IllegalArgumentException("unsupported header.magic " + magic);
         }
-        this.version = readInt(fileChannel);
+        this.version = reader.readInt();
         if (!SUPPORTED_GGUF_VERSIONS.contains(version)) {
             throw new IllegalArgumentException("unsupported header.version " + version);
         }
-        this.tensorCount = Math.toIntExact(readLong(fileChannel));
-        this.metadata_kv_count = Math.toIntExact(readLong(fileChannel));
+        this.tensorCount = Math.toIntExact(reader.readLong());
+        this.metadata_kv_count = Math.toIntExact(reader.readLong());
         this.metadata = HashMap.newHashMap(metadata_kv_count);
         for (int i = 0; i < metadata_kv_count; ++i) {
-            Pair<String, Object> keyValue = readKeyValuePair(fileChannel);
+            Pair<String, Object> keyValue = readKeyValuePair(reader);
             assert !metadata.containsKey(keyValue.first());
             metadata.put(keyValue.first(), keyValue.second());
         }
     }
 
-    private Object readArray(FileChannel fileChannel) throws IOException {
-        MetadataValueType value_type = readMetadataValueType(fileChannel);
-        int len = Math.toIntExact(readLong(fileChannel));
-        switch (value_type) {
+    private Object readArray(ChannelReader reader) throws IOException {
+        MetadataValueType valueType = readMetadataValueType(reader);
+        int len = Math.toIntExact(reader.readLong());
+        switch (valueType) {
             case UINT8, INT8 -> {
-                byte[] bytes = new byte[len];
-                for (int i = 0; i < len; ++i) {
-                    bytes[i] = readByte(fileChannel);
-                }
-                return bytes;
+                return reader.readBytes(len);
             }
             case UINT16, INT16 -> {
                 short[] shorts = new short[len];
                 for (int i = 0; i < len; ++i) {
-                    shorts[i] = readShort(fileChannel);
+                    shorts[i] = reader.readShort();
                 }
                 return shorts;
             }
             case UINT32, INT32 -> {
                 int[] ints = new int[len];
                 for (int i = 0; i < len; ++i) {
-                    ints[i] = readInt(fileChannel);
+                    ints[i] = reader.readInt();
                 }
                 return ints;
             }
             case FLOAT32 -> {
                 float[] floats = new float[len];
                 for (int i = 0; i < len; ++i) {
-                    floats[i] = readFloat(fileChannel);
+                    floats[i] = reader.readFloat();
                 }
                 return floats;
             }
             case BOOL -> {
                 boolean[] booleans = new boolean[len];
                 for (int i = 0; i < len; ++i) {
-                    booleans[i] = readBoolean(fileChannel);
+                    booleans[i] = reader.readBoolean();
                 }
                 return booleans;
             }
             case STRING -> {
                 String[] strings = new String[len];
                 for (int i = 0; i < len; ++i) {
-                    strings[i] = readString(fileChannel);
+                    strings[i] = readString(reader);
                 }
                 return strings;
             }
             case ARRAY -> {
                 Object[] arrays = new Object[len];
                 for (int i = 0; i < len; ++i) {
-                    arrays[i] = readArray(fileChannel);
+                    arrays[i] = readArray(reader);
                 }
                 return arrays;
             }
-            default -> throw new UnsupportedOperationException("read array of " + value_type);
+            default -> throw new UnsupportedOperationException("read array of " + valueType);
         }
     }
 
-    private Object readMetadataValueOfType(MetadataValueType valueType, FileChannel fileChannel) throws IOException {
+    private Object readMetadataValueOfType(MetadataValueType valueType, ChannelReader reader) throws IOException {
         return switch (valueType) {
-            case UINT8, INT8 -> readByte(fileChannel);
-            case UINT16, INT16 -> readShort(fileChannel);
-            case UINT32, INT32 -> readInt(fileChannel);
-            case FLOAT32 -> readFloat(fileChannel);
-            case UINT64, INT64 -> readLong(fileChannel);
-            case FLOAT64 -> readDouble(fileChannel);
-            case BOOL -> readBoolean(fileChannel);
-            case STRING -> readString(fileChannel);
-            case ARRAY -> readArray(fileChannel);
+            case UINT8, INT8 -> reader.readByte();
+            case UINT16, INT16 -> reader.readShort();
+            case UINT32, INT32 -> reader.readInt();
+            case FLOAT32 -> reader.readFloat();
+            case UINT64, INT64 -> reader.readLong();
+            case FLOAT64 -> reader.readDouble();
+            case BOOL -> reader.readBoolean();
+            case STRING -> readString(reader);
+            case ARRAY -> readArray(reader);
         };
     }
 
-    private byte readByte(FileChannel fileChannel) throws IOException {
-        int bytesRead = fileChannel.read(BB_1);
-        assert bytesRead == 1;
-        return BB_1.clear().get(0);
-    }
-
-    private boolean readBoolean(FileChannel fileChannel) throws IOException {
-        return readByte(fileChannel) != 0;
-    }
-
-    private short readShort(FileChannel fileChannel) throws IOException {
-        int bytesRead = fileChannel.read(BB_2);
-        assert bytesRead == 2;
-        return BB_2.clear().getShort(0);
-    }
-
-    private int readInt(FileChannel fileChannel) throws IOException {
-        int bytesRead = fileChannel.read(BB_4);
-        assert bytesRead == 4;
-        return BB_4.clear().getInt(0);
-    }
-
-    private long readLong(FileChannel fileChannel) throws IOException {
-        int bytesRead = fileChannel.read(BB_8);
-        assert bytesRead == 8;
-        return BB_8.clear().getLong(0);
-    }
-
-    private float readFloat(FileChannel fileChannel) throws IOException {
-        return Float.intBitsToFloat(readInt(fileChannel));
-    }
-
-    private double readDouble(FileChannel fileChannel) throws IOException {
-        return Double.longBitsToDouble(readLong(fileChannel));
-    }
-
-    private MetadataValueType readMetadataValueType(FileChannel fileChannel) throws IOException {
-        int index = readInt(fileChannel);
+    private MetadataValueType readMetadataValueType(ChannelReader reader) throws IOException {
+        int index = reader.readInt();
         return MetadataValueType.fromIndex(index);
     }
 
@@ -345,9 +409,10 @@ final class ModelLoader {
 
     public static Llama loadModel(Path ggufPath, int contextLength) throws IOException {
         try (var ignored = Timer.log("Load Gemma4 model")) {
-            GGUF gguf = GGUF.loadModel(ggufPath);
-            FileChannel fileChannel = FileChannel.open(ggufPath, StandardOpenOption.READ);
-            return loadModel(fileChannel, gguf, contextLength, true);
+            try (FileChannel fileChannel = FileChannel.open(ggufPath, StandardOpenOption.READ)) {
+                GGUF gguf = GGUF.loadModel(fileChannel, ggufPath.toString());
+                return loadModel(fileChannel, gguf, contextLength, true);
+            }
         }
     }
 
@@ -579,8 +644,8 @@ final class ModelLoader {
             case Q5_K -> new Q5_KFloatTensor(numElements, entry.memorySegment());
             case Q6_K -> new Q6_KFloatTensor(numElements, entry.memorySegment());
             case F32 -> new F32FloatTensor(numElements, entry.memorySegment());
-            case F16 -> new F16FloatTensor((int) numElements, entry.memorySegment());
-            case BF16 -> new BF16FloatTensor((int) numElements, entry.memorySegment());
+            case F16 -> new F16FloatTensor(numElements, entry.memorySegment());
+            case BF16 -> new BF16FloatTensor(numElements, entry.memorySegment());
             default -> throw new UnsupportedOperationException("Quantization format " + ggmlType);
         };
     }
@@ -1509,7 +1574,7 @@ abstract class FloatTensor {
         return UNSAFE.getFloat(memorySegment.address() + offset);
     }
 
-    abstract int size();
+    abstract long size();
 
     abstract float getFloat(int index);
 
@@ -1595,7 +1660,7 @@ abstract class FloatTensor {
     }
 
     int argmax() {
-        return argmax(0, size());
+        return argmax(0, Math.toIntExact(size()));
     }
 
     @FunctionalInterface
@@ -1617,7 +1682,7 @@ abstract class FloatTensor {
     }
 
     FloatTensor mapInPlace(MapFunction mapFunction) {
-        return mapInPlace(0, size(), mapFunction);
+        return mapInPlace(0, Math.toIntExact(size()), mapFunction);
     }
 
     FloatTensor mapWithIndexInPlace(int thisOffset, int size, FloatTensor.MapWithIndexFunction mapWithIndexFunction) {
@@ -1633,7 +1698,7 @@ abstract class FloatTensor {
     }
 
     FloatTensor addInPlace(FloatTensor that) {
-        return addInPlace(0, that, 0, size());
+        return addInPlace(0, that, 0, Math.toIntExact(size()));
     }
 
     FloatTensor multiplyInPlace(int thisOffset, FloatTensor that, int thatOffset, int size) {
@@ -1665,17 +1730,17 @@ abstract class FloatTensor {
 
 final class Q4_0FloatTensor extends FloatTensor {
 
-    final long sizeL;
+    final long size;
     final MemorySegment memorySegment;
 
     public Q4_0FloatTensor(long size, MemorySegment memorySegment) {
-        this.sizeL = size;
+        this.size = size;
         this.memorySegment = memorySegment;
     }
 
     @Override
-    int size() {
-        return (int) Math.min(sizeL, Integer.MAX_VALUE);
+    long size() {
+        return size;
     }
 
     @Override
@@ -1695,7 +1760,7 @@ final class Q4_0FloatTensor extends FloatTensor {
 
     @Override
     public float getFloat(int index) {
-        assert 0 <= index && index < sizeL;
+        assert 0 <= index && index < size;
         int blockIndex = index / GGMLType.Q4_0.getBlockSize();
         int blockOffset = blockIndex * GGMLType.Q4_0.getTypeSize();
         float scale = Float.float16ToFloat(readShort(memorySegment, blockOffset));
@@ -1778,22 +1843,22 @@ final class Q4_0FloatTensor extends FloatTensor {
 
 final class Q4_1FloatTensor extends FloatTensor {
 
-    final long sizeL;
+    final long size;
     final MemorySegment memorySegment;
 
     public Q4_1FloatTensor(long size, MemorySegment memorySegment) {
-        this.sizeL = size;
+        this.size = size;
         this.memorySegment = memorySegment;
     }
 
-    @Override int size() { return (int) Math.min(sizeL, Integer.MAX_VALUE); }
+    @Override long size() { return size; }
     @Override public void setFloat(int index, float value) { throw new UnsupportedOperationException("setFloat"); }
     @Override FloatVector getFloatVector(VectorSpecies<Float> species, int index) { throw new UnsupportedOperationException("getFloatVector"); }
     @Override public GGMLType type() { return GGMLType.Q4_1; }
 
     @Override
     public float getFloat(int index) {
-        assert 0 <= index && index < sizeL;
+        assert 0 <= index && index < size;
         int blockIndex = index / GGMLType.Q4_1.getBlockSize();
         int blockOffset = blockIndex * GGMLType.Q4_1.getTypeSize();
         float delta = Float.float16ToFloat(readShort(memorySegment, blockOffset));
@@ -1895,15 +1960,15 @@ final class Q4_KFloatTensor extends FloatTensor {
     static final int BLOCK_SIZE = GGMLType.QK_K;
     static final int TYPE_SIZE = GGMLType.Q4_K.getTypeSize();
 
-    final long sizeL;
+    final long size;
     final MemorySegment memorySegment;
 
     public Q4_KFloatTensor(long size, MemorySegment memorySegment) {
-        this.sizeL = size;
+        this.size = size;
         this.memorySegment = memorySegment;
     }
 
-    @Override int size() { return (int) Math.min(sizeL, Integer.MAX_VALUE); }
+    @Override long size() { return size; }
     @Override public void setFloat(int index, float value) { throw new UnsupportedOperationException("setFloat"); }
     @Override FloatVector getFloatVector(VectorSpecies<Float> species, int index) { throw new UnsupportedOperationException("getFloatVector"); }
     @Override public GGMLType type() { return GGMLType.Q4_K; }
@@ -1923,11 +1988,6 @@ final class Q4_KFloatTensor extends FloatTensor {
             return low | (high << 4);
         }
     }
-
-//    @Override
-//    public float getFloat(int index) {
-//        return getFloat((long) index);
-//    }
 
     @Override
     public float getFloat(int index) {
@@ -2067,15 +2127,15 @@ final class Q5_KFloatTensor extends FloatTensor {
     static final int BLOCK_SIZE = GGMLType.QK_K;
     static final int TYPE_SIZE = GGMLType.Q5_K.getTypeSize();
 
-    final long sizeL;
+    final long size;
     final MemorySegment memorySegment;
 
     public Q5_KFloatTensor(long size, MemorySegment memorySegment) {
-        this.sizeL = size;
+        this.size = size;
         this.memorySegment = memorySegment;
     }
 
-    @Override int size() { return (int) Math.min(sizeL, Integer.MAX_VALUE); }
+    @Override long size() { return size; }
     @Override public void setFloat(int index, float value) { throw new UnsupportedOperationException("setFloat"); }
     @Override FloatVector getFloatVector(VectorSpecies<Float> species, int index) { throw new UnsupportedOperationException("getFloatVector"); }
     @Override public GGMLType type() { return GGMLType.Q5_K; }
@@ -2219,15 +2279,15 @@ final class Q6_KFloatTensor extends FloatTensor {
     static final int BLOCK_SIZE = GGMLType.QK_K;
     static final int TYPE_SIZE = GGMLType.Q6_K.getTypeSize();
 
-    final long sizeL;
+    final long size;
     final MemorySegment memorySegment;
 
     public Q6_KFloatTensor(long size, MemorySegment memorySegment) {
-        this.sizeL = size;
+        this.size = size;
         this.memorySegment = memorySegment;
     }
 
-    @Override int size() { return (int) Math.min(sizeL, Integer.MAX_VALUE); }
+    @Override long size() { return size; }
     @Override public void setFloat(int index, float value) { throw new UnsupportedOperationException("setFloat"); }
     @Override FloatVector getFloatVector(VectorSpecies<Float> species, int index) { throw new UnsupportedOperationException("getFloatVector"); }
     @Override public GGMLType type() { return GGMLType.Q6_K; }
@@ -2289,8 +2349,7 @@ final class Q6_KFloatTensor extends FloatTensor {
             j += alignmentBound;
         }
 
-        FloatVector val = FloatVector.zero(F_SPECIES);
-        FloatVector val2 = FloatVector.zero(F_SPECIES);
+        FloatVector acc = FloatVector.zero(F_SPECIES);
         long blockOffset = (long) (thisOffset + j) / BLOCK_SIZE * TYPE_SIZE;
         int upperBound = j + (size - j) / BLOCK_SIZE * BLOCK_SIZE;
 
@@ -2298,7 +2357,7 @@ final class Q6_KFloatTensor extends FloatTensor {
             long qlOff = blockOffset;
             long qhOff = blockOffset + 128;
             long scOff = blockOffset + 192;
-            float d = Float.float16ToFloat(readShort(thiz.memorySegment, blockOffset + 208));
+            float d = fp16ToFloatNoIntrinsic(readShort(thiz.memorySegment, blockOffset + 208));
 
             for (int h = 0; h < 2; h++) {
                 long qlBase = qlOff + h * 64;
@@ -2336,38 +2395,38 @@ final class Q6_KFloatTensor extends FloatTensor {
                     switch (F_SPECIES.vectorBitSize()) {
                         case 512 -> {
                             var q0f = q0.castShape(F_SPECIES, 0).reinterpretAsFloats();
-                            val = q0f.mul(ds0Vec).fma(that.getFloatVector(F_SPECIES, sg0Idx), val);
                             var q1f = q1.castShape(F_SPECIES, 0).reinterpretAsFloats();
-                            val2 = q1f.mul(ds1Vec).fma(that.getFloatVector(F_SPECIES, sg1Idx), val2);
                             var q2f = q2.castShape(F_SPECIES, 0).reinterpretAsFloats();
-                            val = q2f.mul(ds2Vec).fma(that.getFloatVector(F_SPECIES, sg2Idx), val);
                             var q3f = q3.castShape(F_SPECIES, 0).reinterpretAsFloats();
-                            val2 = q3f.mul(ds3Vec).fma(that.getFloatVector(F_SPECIES, sg3Idx), val2);
+                            acc = q0f.mul(ds0Vec).fma(that.getFloatVector(F_SPECIES, sg0Idx), acc);
+                            acc = q1f.mul(ds1Vec).fma(that.getFloatVector(F_SPECIES, sg1Idx), acc);
+                            acc = q2f.mul(ds2Vec).fma(that.getFloatVector(F_SPECIES, sg2Idx), acc);
+                            acc = q3f.mul(ds3Vec).fma(that.getFloatVector(F_SPECIES, sg3Idx), acc);
                         }
                         case 256 -> {
                             for (int p = 0; p < 2; p++) {
                                 int off = p * F_SPECIES.length();
                                 var q0f = q0.castShape(F_SPECIES, p).reinterpretAsFloats();
-                                val = q0f.mul(ds0Vec).fma(that.getFloatVector(F_SPECIES, sg0Idx + off), val);
                                 var q1f = q1.castShape(F_SPECIES, p).reinterpretAsFloats();
-                                val2 = q1f.mul(ds1Vec).fma(that.getFloatVector(F_SPECIES, sg1Idx + off), val2);
                                 var q2f = q2.castShape(F_SPECIES, p).reinterpretAsFloats();
-                                val = q2f.mul(ds2Vec).fma(that.getFloatVector(F_SPECIES, sg2Idx + off), val);
                                 var q3f = q3.castShape(F_SPECIES, p).reinterpretAsFloats();
-                                val2 = q3f.mul(ds3Vec).fma(that.getFloatVector(F_SPECIES, sg3Idx + off), val2);
+                                acc = q0f.mul(ds0Vec).fma(that.getFloatVector(F_SPECIES, sg0Idx + off), acc);
+                                acc = q1f.mul(ds1Vec).fma(that.getFloatVector(F_SPECIES, sg1Idx + off), acc);
+                                acc = q2f.mul(ds2Vec).fma(that.getFloatVector(F_SPECIES, sg2Idx + off), acc);
+                                acc = q3f.mul(ds3Vec).fma(that.getFloatVector(F_SPECIES, sg3Idx + off), acc);
                             }
                         }
                         case 128 -> {
                             for (int p = 0; p < 4; p++) {
                                 int off = p * F_SPECIES.length();
                                 var q0f = q0.castShape(F_SPECIES, p).reinterpretAsFloats();
-                                val = q0f.mul(ds0Vec).fma(that.getFloatVector(F_SPECIES, sg0Idx + off), val);
                                 var q1f = q1.castShape(F_SPECIES, p).reinterpretAsFloats();
-                                val2 = q1f.mul(ds1Vec).fma(that.getFloatVector(F_SPECIES, sg1Idx + off), val2);
                                 var q2f = q2.castShape(F_SPECIES, p).reinterpretAsFloats();
-                                val = q2f.mul(ds2Vec).fma(that.getFloatVector(F_SPECIES, sg2Idx + off), val);
                                 var q3f = q3.castShape(F_SPECIES, p).reinterpretAsFloats();
-                                val2 = q3f.mul(ds3Vec).fma(that.getFloatVector(F_SPECIES, sg3Idx + off), val2);
+                                acc = q0f.mul(ds0Vec).fma(that.getFloatVector(F_SPECIES, sg0Idx + off), acc);
+                                acc = q1f.mul(ds1Vec).fma(that.getFloatVector(F_SPECIES, sg1Idx + off), acc);
+                                acc = q2f.mul(ds2Vec).fma(that.getFloatVector(F_SPECIES, sg2Idx + off), acc);
+                                acc = q3f.mul(ds3Vec).fma(that.getFloatVector(F_SPECIES, sg3Idx + off), acc);
                             }
                         }
                         default -> throw new UnsupportedOperationException(F_SPECIES.toString());
@@ -2376,7 +2435,7 @@ final class Q6_KFloatTensor extends FloatTensor {
             }
         }
 
-        result += val.add(val2).reduceLanes(VectorOperators.ADD);
+        result += acc.reduceLanes(VectorOperators.ADD);
 
         if (j < size) {
             result += FloatTensor.scalarDot(thiz, thisOffset + j, that, thatOffset + j, size - j);
@@ -2384,21 +2443,22 @@ final class Q6_KFloatTensor extends FloatTensor {
 
         return result;
     }
+
 }
 
 final class Q8_0FloatTensor extends FloatTensor {
 
-    final long sizeL;
+    final long size;
     final MemorySegment memorySegment;
 
     public Q8_0FloatTensor(long size, MemorySegment memorySegment) {
-        this.sizeL = size;
+        this.size = size;
         this.memorySegment = memorySegment;
     }
 
     @Override
-    int size() {
-        return (int) Math.min(sizeL, Integer.MAX_VALUE);
+    long size() {
+        return size;
     }
 
     @Override
@@ -2493,15 +2553,15 @@ final class Q8_0FloatTensor extends FloatTensor {
 
 final class BF16FloatTensor extends FloatTensor {
 
-    final int size;
+    final long size;
     final MemorySegment memorySegment;
 
-    public BF16FloatTensor(int size, MemorySegment memorySegment) {
+    public BF16FloatTensor(long size, MemorySegment memorySegment) {
         this.size = size;
         this.memorySegment = memorySegment;
     }
 
-    @Override int size() { return size; }
+    @Override long size() { return size; }
     @Override public void setFloat(int index, float value) { throw new UnsupportedOperationException("setFloat"); }
     @Override FloatVector getFloatVector(VectorSpecies<Float> species, int index) { throw new UnsupportedOperationException("getFloatVector"); }
     @Override public GGMLType type() { return GGMLType.BF16; }
@@ -2545,15 +2605,15 @@ final class BF16FloatTensor extends FloatTensor {
 
 final class F16FloatTensor extends FloatTensor {
 
-    final int size;
+    final long size;
     final MemorySegment memorySegment;
 
-    public F16FloatTensor(int size, MemorySegment memorySegment) {
+    public F16FloatTensor(long size, MemorySegment memorySegment) {
         this.size = size;
         this.memorySegment = memorySegment;
     }
 
-    @Override int size() { return size; }
+    @Override long size() { return size; }
     @Override public void setFloat(int index, float value) { throw new UnsupportedOperationException("setFloat"); }
     @Override FloatVector getFloatVector(VectorSpecies<Float> species, int index) { throw new UnsupportedOperationException("getFloatVector"); }
     @Override public GGMLType type() { return GGMLType.F16; }
@@ -2597,14 +2657,17 @@ final class F16FloatTensor extends FloatTensor {
 
 final class ArrayFloatTensor extends FloatTensor {
 
+    final long size;
     final float[] values;
 
     ArrayFloatTensor(float[] values) {
+        this.size = values.length;
         this.values = values;
     }
 
     ArrayFloatTensor(FloatBuffer buf) {
         this.values = new float[buf.remaining()];
+        this.size = values.length;
         buf.get(this.values);
         buf.rewind();
     }
@@ -2615,8 +2678,8 @@ final class ArrayFloatTensor extends FloatTensor {
     }
 
     @Override
-    public int size() {
-        return values.length;
+    public long size() {
+        return size;
     }
 
     @Override
@@ -2650,8 +2713,11 @@ final class ArrayFloatTensor extends FloatTensor {
 
     @Override
     public float dot(int thisOffset, FloatTensor that, int thatOffset, int size) {
-        if (that instanceof ArrayFloatTensor aft && USE_VECTOR_API) {
-            return vectorDot(this, thisOffset, aft, thatOffset, size);
+        if (that instanceof ArrayFloatTensor aft) {
+            if (USE_VECTOR_API) {
+                return vectorDot(this, thisOffset, aft, thatOffset, size);
+            }
+            return FloatTensor.scalarDot(this, thisOffset, aft, thatOffset, size);
         }
         return that.dot(thatOffset, this, thisOffset, size);
     }
@@ -2674,15 +2740,15 @@ final class ArrayFloatTensor extends FloatTensor {
 
 final class F32FloatTensor extends FloatTensor {
 
-    private final int size;
+    private final long size;
     private final MemorySegment memorySegment;
 
     F32FloatTensor(long numElements, MemorySegment memorySegment) {
-        this.size = Math.toIntExact(numElements);
+        this.size = numElements;
         this.memorySegment = memorySegment;
     }
 
-    @Override public int size() { return size; }
+    @Override public long size() { return size; }
 
     @Override
     public float getFloat(int index) {
@@ -2816,7 +2882,7 @@ record CategoricalSampler(RandomGenerator rng) implements Sampler {
                 return i;
             }
         }
-        return logits.size() - 1;
+        return Math.toIntExact(logits.size()) - 1;
     }
 }
 
@@ -2858,7 +2924,7 @@ final class ToppSampler implements Sampler {
     public int sampleToken(FloatTensor logits) {
         Comparator<Integer> comparator = Comparator.comparingDouble((Integer i) -> logits.getFloat(i)).reversed();
 
-        int n = logits.size();
+        int n = Math.toIntExact(logits.size());
         int head = 0;
         int tail = n - 1;
         float cutoff = (1.0f - topp) / (n - 1);
@@ -3001,8 +3067,9 @@ public class Gemma4 {
                 innerSampler = new ToppSampler(vocabularySize, topp, rng);
             }
             sampler = logits -> {
-                logits.divideInPlace(0, logits.size(), temperature);
-                logits.softmaxInPlace(0, logits.size());
+                int logitsSize = Math.toIntExact(logits.size());
+                logits.divideInPlace(0, logitsSize, temperature);
+                logits.softmaxInPlace(0, logitsSize);
                 return innerSampler.sampleToken(logits);
             };
         }
@@ -3230,26 +3297,26 @@ final class AOT {
             if (!Files.exists(path) || !Files.isRegularFile(path)) {
                 throw new IllegalArgumentException("Cannot pre-load model: " + path);
             }
-            GGUF gguf = GGUF.loadModel(path);
-            Llama base = ModelLoader.loadModel(null, gguf, Gemma4.DEFAULT_MAX_TOKENS, false);
-            // Precompute RoPE frequencies at build time (pure Java arrays, survives native-image)
-            Llama.Configuration config = base.configuration();
-            Pair<float[], float[]> ropeFreqsSWA = RoPE.precomputeFreqsCis(
-                    config.contextLength, config.headSizeSWA, config.ropeThetaSWA);
-            // Read rope_freqs from model file
-            Pair<float[], float[]> ropeFreqsFull;
             try (FileChannel fileChannel = FileChannel.open(path, StandardOpenOption.READ)) {
+                GGUF gguf = GGUF.loadModel(fileChannel, path.toString());
+                Llama base = ModelLoader.loadModel(null, gguf, Gemma4.DEFAULT_MAX_TOKENS, false);
+                // Precompute RoPE frequencies at build time (pure Java arrays, survives native-image)
+                Llama.Configuration config = base.configuration();
+                Pair<float[], float[]> ropeFreqsSWA = RoPE.precomputeFreqsCis(
+                        config.contextLength, config.headSizeSWA, config.ropeThetaSWA);
+                // Read rope_freqs from model file
+                Pair<float[], float[]> ropeFreqsFull;
                 Map<String, GGMLTensorEntry> tmpEntries = GGUF.loadTensors(fileChannel, gguf.getTensorDataOffset(), gguf.getTensorInfos());
                 FloatBuffer ropeFreqsBuf = ModelLoader.toFloatBuffer(tmpEntries.get("rope_freqs.weight"));
                 float[] modelRopeFreqs = new float[ropeFreqsBuf.remaining()];
                 ropeFreqsBuf.get(modelRopeFreqs);
                 ropeFreqsFull = RoPE.precomputeFreqsCisFromFreqs(
                         config.contextLength, config.headSizeFull, config.ropeTheta, modelRopeFreqs);
+                return new PartialModel(
+                        path.getFileName().toString(), base,
+                        gguf.getTensorDataOffset(), gguf.getTensorInfos(),
+                        ropeFreqsSWA, ropeFreqsFull);
             }
-            return new PartialModel(
-                    path.getFileName().toString(), base,
-                    gguf.getTensorDataOffset(), gguf.getTensorInfos(),
-                    ropeFreqsSWA, ropeFreqsFull);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
