@@ -2,6 +2,11 @@
 
 Fast [Gemma 4](https://ai.google.dev/gemma) inference (dense and MoE) implemented in pure Java.
 
+<p align="center">
+  <img src="https://ai.google.dev/static/gemma/images/gemma4_banner.png">
+</p>
+
+
 ## Features
 
  - Single file, no dependencies
