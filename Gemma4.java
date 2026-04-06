@@ -5,19 +5,17 @@
 //RUNTIME_OPTIONS --add-modules=jdk.incubator.vector -Djdk.incubator.vector.VECTOR_ACCESS_OOB_CHECK=0
 //MAIN com.llama4j.Gemma4
 
-// Practical Gemma 4 inference in a single Java file
+// Gemma 4 inference in pure Java
 // Author: Alfonso² Peterssen
 // Based on Andrej Karpathy's llama2.c and minbpe projects
-// Also please check the sibling project: https://github.com/mukel/llama3.java
+// Related project: https://github.com/mukel/llama3.java
 //
-// Supports llama.cpp's GGUF format, quantized models (Q4_0, Q4_1, Q4_K, Q5_K, Q6_K, Q8_0, F16, BF16, F32)
-// Multi-threaded matrix vector multiplication routines implemented using Java's Vector API
-// Simple CLI with --chat and --instruct mode
+// Supports GGUF models and multiple tensor formats
+// Matrix-vector kernels use Java's Vector API
+// CLI modes: --chat and --instruct
 //
-// To run just:
+// Run:
 // jbang Gemma4.java --help
-//
-// Enjoy!
 package com.llama4j;
 
 import jdk.incubator.vector.ByteVector;
@@ -668,12 +666,14 @@ final class ModelLoader {
             case Q8_0 -> new Q8_0FloatTensor(numElements, entry.memorySegment());
             case Q4_0 -> new Q4_0FloatTensor(numElements, entry.memorySegment());
             case Q4_1 -> new Q4_1FloatTensor(numElements, entry.memorySegment());
+            case Q5_1 -> new Q5_1FloatTensor(numElements, entry.memorySegment());
             case Q4_K -> new Q4_KFloatTensor(numElements, entry.memorySegment());
             case Q5_K -> new Q5_KFloatTensor(numElements, entry.memorySegment());
             case Q6_K -> new Q6_KFloatTensor(numElements, entry.memorySegment());
             case F32 -> new F32FloatTensor(numElements, entry.memorySegment());
             case F16 -> new F16FloatTensor(numElements, entry.memorySegment());
             case BF16 -> new BF16FloatTensor(numElements, entry.memorySegment());
+            case MXFP4 -> new MXFP4FloatTensor(numElements, entry.memorySegment());
             default -> throw new UnsupportedOperationException("Quantization format " + ggmlType);
         };
     }
@@ -1303,7 +1303,7 @@ record Llama(Configuration configuration, GemmaTokenizer tokenizer, Weights weig
             maxTokens = model.configuration().contextLength;
         }
         List<Integer> generatedTokens = new ArrayList<>(maxTokens);
-        int token = state.latestToken; // BOS?
+        int token = state.latestToken; // current token (initialized to BOS)
         int nextToken;
         int promptIndex = 0;
         for (int position = startPosition; position < maxTokens; ++position) {
@@ -2007,6 +2007,126 @@ final class Q4_1FloatTensor extends FloatTensor {
     }
 }
 
+final class Q5_1FloatTensor extends FloatTensor {
+
+    private final long size;
+    private final MemorySegment memorySegment;
+
+    Q5_1FloatTensor(long size, MemorySegment memorySegment) {
+        this.size = size;
+        this.memorySegment = memorySegment;
+    }
+
+    @Override long size() { return size; }
+    @Override public void setFloat(int index, float value) { throw new UnsupportedOperationException("setFloat"); }
+    @Override FloatVector getFloatVector(VectorSpecies<Float> species, int index) { throw new UnsupportedOperationException("getFloatVector"); }
+    @Override public GGMLType type() { return GGMLType.Q5_1; }
+
+    @Override
+    public float getFloat(long index) {
+        assert 0 <= index && index < size;
+        long blockIndex = index / GGMLType.Q5_1.getBlockSize();
+        int inBlockIndex = (int) (index % GGMLType.Q5_1.getBlockSize());
+        long blockOffset = blockIndex * GGMLType.Q5_1.getTypeSize();
+
+        float d = readFloat16(memorySegment, blockOffset);
+        float m = readFloat16(memorySegment, blockOffset + Float16.BYTES);
+        int qh = readInt32LE(memorySegment, blockOffset + 2L * Float16.BYTES);
+
+        int j;
+        int nibble;
+        int xh;
+        if (inBlockIndex < GGMLType.Q5_1.getBlockSize() / 2) {
+            j = inBlockIndex;
+            nibble = Byte.toUnsignedInt(readByte(memorySegment, blockOffset + 2L * Float16.BYTES + Integer.BYTES + j)) & 0x0F;
+            xh = ((qh >> j) << 4) & 0x10;
+        } else {
+            j = inBlockIndex - GGMLType.Q5_1.getBlockSize() / 2;
+            nibble = (Byte.toUnsignedInt(readByte(memorySegment, blockOffset + 2L * Float16.BYTES + Integer.BYTES + j)) >>> 4) & 0x0F;
+            xh = (qh >> (j + 12)) & 0x10;
+        }
+
+        int q = nibble | xh;
+        return q * d + m;
+    }
+
+    @Override
+    public float dot(int thisOffset, FloatTensor that, int thatOffset, int size) {
+        if (that instanceof ArrayFloatTensor aft) {
+            if (FloatTensor.USE_VECTOR_API) {
+                return vectorDot(this, thisOffset, aft, thatOffset, size);
+            }
+            return scalarDot(this, thisOffset, aft, thatOffset, size);
+        }
+        return FloatTensor.scalarDot(this, thisOffset, that, thatOffset, size);
+    }
+
+    private static float vectorDot(Q5_1FloatTensor thiz, int thisOffset, ArrayFloatTensor that, int thatOffset, int size) {
+        assert Integer.bitCount(GGMLType.Q5_1.getBlockSize()) == 1 : "power of 2";
+        int j = 0;
+        float result = 0f;
+
+        int alignmentBound = Math.min(size, -thisOffset & (GGMLType.Q5_1.getBlockSize() - 1));
+        if (alignmentBound > 0) {
+            result += scalarDot(thiz, thisOffset, that, thatOffset, alignmentBound);
+            j = alignmentBound;
+        }
+
+        float[] decoded = new float[GGMLType.Q5_1.getBlockSize()];
+        int upperBound = j + (size - j) / GGMLType.Q5_1.getBlockSize() * GGMLType.Q5_1.getBlockSize();
+        int vecUpper = F_SPECIES.loopBound(GGMLType.Q5_1.getBlockSize());
+        for (; j < upperBound; j += GGMLType.Q5_1.getBlockSize()) {
+            assert (thisOffset + j) % GGMLType.Q5_1.getBlockSize() == 0;
+            long blockOffset = (long) (thisOffset + j) / GGMLType.Q5_1.getBlockSize() * GGMLType.Q5_1.getTypeSize();
+            float d = readFloat16(thiz.memorySegment, blockOffset);
+            float m = readFloat16(thiz.memorySegment, blockOffset + Float16.BYTES);
+            int qh = readInt32LE(thiz.memorySegment, blockOffset + 2L * Float16.BYTES);
+            long qsBase = blockOffset + 2L * Float16.BYTES + Integer.BYTES;
+
+            for (int p = 0; p < GGMLType.Q5_1.getBlockSize() / 2; p++) {
+                int packed = Byte.toUnsignedInt(readByte(thiz.memorySegment, qsBase + p));
+                int x0 = (packed & 0x0F) | ((((qh >> p) << 4) & 0x10));
+                int x1 = ((packed >>> 4) & 0x0F) | ((qh >> (p + 12)) & 0x10);
+                decoded[p] = x0 * d + m;
+                decoded[p + GGMLType.Q5_1.getBlockSize() / 2] = x1 * d + m;
+            }
+
+            FloatVector acc = FloatVector.zero(F_SPECIES);
+            for (int i = 0; i < vecUpper; i += F_SPECIES.length()) {
+                FloatVector w = FloatVector.fromArray(F_SPECIES, decoded, i);
+                FloatVector x = that.getFloatVector(F_SPECIES, thatOffset + j + i);
+                acc = w.fma(x, acc);
+            }
+            result += acc.reduceLanes(VectorOperators.ADD);
+
+            for (int i = vecUpper; i < GGMLType.Q5_1.getBlockSize(); i++) {
+                result += decoded[i] * that.values[thatOffset + j + i];
+            }
+        }
+
+        if (j < size) {
+            result += scalarDot(thiz, thisOffset + j, that, thatOffset + j, size - j);
+        }
+        return result;
+    }
+
+    private static float scalarDot(Q5_1FloatTensor thiz, int thisOffset, ArrayFloatTensor that, int thatOffset, int size) {
+        float result = 0f;
+        for (int i = 0; i < size; i++) {
+            result += thiz.getFloat(thisOffset + i) * that.values[thatOffset + i];
+        }
+        return result;
+    }
+
+    private static int readInt32LE(MemorySegment memorySegment, long offset) {
+        int b0 = Byte.toUnsignedInt(readByte(memorySegment, offset));
+        int b1 = Byte.toUnsignedInt(readByte(memorySegment, offset + 1));
+        int b2 = Byte.toUnsignedInt(readByte(memorySegment, offset + 2));
+        int b3 = Byte.toUnsignedInt(readByte(memorySegment, offset + 3));
+        return b0 | (b1 << 8) | (b2 << 16) | (b3 << 24);
+    }
+}
+
 final class Q4_KFloatTensor extends FloatTensor {
 
     static final int BLOCK_SIZE = GGMLType.QK_K;
@@ -2629,6 +2749,148 @@ final class Q8_0FloatTensor extends FloatTensor {
         }
 
         return result;
+    }
+}
+
+final class MXFP4FloatTensor extends FloatTensor {
+
+    private static final int[] MXFP4_VALUES = {0, 1, 2, 3, 4, 6, 8, 12, 0, -1, -2, -3, -4, -6, -8, -12};
+
+    private final long size;
+    private final MemorySegment memorySegment;
+
+    MXFP4FloatTensor(long size, MemorySegment memorySegment) {
+        this.size = size;
+        this.memorySegment = memorySegment;
+    }
+
+    @Override long size() { return size; }
+    @Override public void setFloat(int index, float value) { throw new UnsupportedOperationException("setFloat"); }
+    @Override FloatVector getFloatVector(VectorSpecies<Float> species, int index) { throw new UnsupportedOperationException("getFloatVector"); }
+    @Override public GGMLType type() { return GGMLType.MXFP4; }
+
+    @Override
+    public float getFloat(long index) {
+        assert 0 <= index && index < size;
+        long blockIndex = index / GGMLType.QK_MXFP4;
+        int inBlockIndex = (int) (index % GGMLType.QK_MXFP4);
+        long blockOffset = blockIndex * GGMLType.MXFP4.getTypeSize();
+
+        int e8m0 = Byte.toUnsignedInt(readByte(memorySegment, blockOffset));
+        float d = e8m0ToFp32Half(e8m0);
+
+        long qsOffset = blockOffset + Byte.BYTES + (inBlockIndex & 0x0F);
+        int packed = Byte.toUnsignedInt(readByte(memorySegment, qsOffset));
+        int nibble = inBlockIndex < (GGMLType.QK_MXFP4 / 2) ? (packed & 0x0F) : ((packed >>> 4) & 0x0F);
+
+        return MXFP4_VALUES[nibble] * d;
+    }
+
+    @Override
+    public float dot(int thisOffset, FloatTensor that, int thatOffset, int size) {
+        if (that instanceof ArrayFloatTensor aft) {
+            if (FloatTensor.USE_VECTOR_API) {
+                return vectorDot(this, thisOffset, aft, thatOffset, size);
+            }
+            return scalarDot(this, thisOffset, aft, thatOffset, size);
+        }
+        return FloatTensor.scalarDot(this, thisOffset, that, thatOffset, size);
+    }
+
+    private static float vectorDot(MXFP4FloatTensor thiz, int thisOffset, ArrayFloatTensor that, int thatOffset, int size) {
+        assert Integer.bitCount(GGMLType.QK_MXFP4) == 1 : "power of 2";
+        int j = 0;
+        float result = 0f;
+
+        int alignmentBound = Math.min(size, -thisOffset & (GGMLType.QK_MXFP4 - 1));
+        if (alignmentBound > 0) {
+            result += scalarDot(thiz, thisOffset, that, thatOffset, alignmentBound);
+            j = alignmentBound;
+        }
+
+        int upperBound = j + (size - j) / GGMLType.QK_MXFP4 * GGMLType.QK_MXFP4;
+        for (; j < upperBound; j += GGMLType.QK_MXFP4) {
+            assert (thisOffset + j) % GGMLType.QK_MXFP4 == 0;
+            long blockOffset = (long) (thisOffset + j) / GGMLType.QK_MXFP4 * GGMLType.MXFP4.getTypeSize();
+            float d = e8m0ToFp32Half(Byte.toUnsignedInt(readByte(thiz.memorySegment, blockOffset)));
+
+            ByteVector packed = ByteVector.fromMemorySegment(ByteVector.SPECIES_128, thiz.memorySegment, blockOffset + Byte.BYTES, ByteOrder.LITTLE_ENDIAN);
+            ByteVector lo = packed.and((byte) 0x0F);
+            ByteVector hi = packed.lanewise(VectorOperators.LSHR, 4);
+
+            float blockSum = 0f;
+            switch (F_SPECIES.vectorBitSize()) {
+                case 512 -> {
+                    FloatVector loCoeffs = mxfp4CodesToCoeffs((FloatVector) lo.castShape(F_SPECIES, 0));
+                    FloatVector hiCoeffs = mxfp4CodesToCoeffs((FloatVector) hi.castShape(F_SPECIES, 0));
+                    FloatVector xLo = that.getFloatVector(F_SPECIES, thatOffset + j);
+                    FloatVector xHi = that.getFloatVector(F_SPECIES, thatOffset + j + GGMLType.QK_MXFP4 / 2);
+                    blockSum += loCoeffs.fma(xLo, hiCoeffs.mul(xHi)).reduceLanes(VectorOperators.ADD);
+                }
+                case 256 -> {
+                    FloatVector lo0 = mxfp4CodesToCoeffs((FloatVector) lo.castShape(F_SPECIES, 0));
+                    FloatVector lo1 = mxfp4CodesToCoeffs((FloatVector) lo.castShape(F_SPECIES, 1));
+                    FloatVector hi0 = mxfp4CodesToCoeffs((FloatVector) hi.castShape(F_SPECIES, 0));
+                    FloatVector hi1 = mxfp4CodesToCoeffs((FloatVector) hi.castShape(F_SPECIES, 1));
+                    FloatVector x0 = that.getFloatVector(F_SPECIES, thatOffset + j);
+                    FloatVector x1 = that.getFloatVector(F_SPECIES, thatOffset + j + F_SPECIES.length());
+                    FloatVector x2 = that.getFloatVector(F_SPECIES, thatOffset + j + GGMLType.QK_MXFP4 / 2);
+                    FloatVector x3 = that.getFloatVector(F_SPECIES, thatOffset + j + GGMLType.QK_MXFP4 / 2 + F_SPECIES.length());
+                    blockSum += lo0.fma(x0, lo1.mul(x1)).reduceLanes(VectorOperators.ADD);
+                    blockSum += hi0.fma(x2, hi1.mul(x3)).reduceLanes(VectorOperators.ADD);
+                }
+                case 128 -> {
+                    FloatVector sum = FloatVector.zero(F_SPECIES);
+                    for (int p = 0; p < 4; p++) {
+                        FloatVector loPart = mxfp4CodesToCoeffs((FloatVector) lo.castShape(F_SPECIES, p));
+                        FloatVector hiPart = mxfp4CodesToCoeffs((FloatVector) hi.castShape(F_SPECIES, p));
+                        FloatVector xLo = that.getFloatVector(F_SPECIES, thatOffset + j + p * F_SPECIES.length());
+                        FloatVector xHi = that.getFloatVector(F_SPECIES, thatOffset + j + GGMLType.QK_MXFP4 / 2 + p * F_SPECIES.length());
+                        sum = loPart.fma(xLo, sum);
+                        sum = hiPart.fma(xHi, sum);
+                    }
+                    blockSum += sum.reduceLanes(VectorOperators.ADD);
+                }
+                default -> throw new UnsupportedOperationException(F_SPECIES.toString());
+            }
+
+            result += blockSum * d;
+        }
+
+        if (j < size) {
+            result += scalarDot(thiz, thisOffset + j, that, thatOffset + j, size - j);
+        }
+        return result;
+    }
+
+    private static FloatVector mxfp4CodesToCoeffs(FloatVector codes) {
+        FloatVector zero = FloatVector.zero(F_SPECIES);
+        FloatVector eight = FloatVector.broadcast(F_SPECIES, 8f);
+        var negMask = codes.compare(VectorOperators.GE, 8f);
+
+        FloatVector t = codes.sub(zero.blend(eight, negMask));
+        FloatVector mag = t
+                .add(t.sub(4f).lanewise(VectorOperators.MAX, 0f))
+                .add(t.sub(6f).lanewise(VectorOperators.MAX, 0f).mul(2f));
+        return mag.blend(mag.neg(), negMask);
+    }
+
+    private static float scalarDot(MXFP4FloatTensor thiz, int thisOffset, ArrayFloatTensor that, int thatOffset, int size) {
+        float result = 0f;
+        for (int i = 0; i < size; i++) {
+            result += thiz.getFloat(thisOffset + i) * that.values[thatOffset + i];
+        }
+        return result;
+    }
+
+    private static float e8m0ToFp32Half(int x) {
+        int bits;
+        if (x < 2) {
+            bits = 0x00200000 << x;
+        } else {
+            bits = (x - 1) << 23;
+        }
+        return Float.intBitsToFloat(bits);
     }
 }
 
@@ -3583,4 +3845,3 @@ final class AOT {
         }
     }
 }
-
