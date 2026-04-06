@@ -3212,9 +3212,6 @@ public class Gemma4 {
         if (!options.stream()) {
             return token -> {};
         }
-        if (!options.think()) {
-            return plainStreamingPrinter(tokenizer);
-        }
 
         Integer channelOpen = tokenizer.getSpecialTokens().get("<|channel>");
         Integer channelClose = tokenizer.getSpecialTokens().get("<channel|>");
@@ -3222,19 +3219,24 @@ public class Gemma4 {
             return plainStreamingPrinter(tokenizer);
         }
 
+        boolean thinkEnabled = options.think();
         PrintStream thoughtOut = options.thinkInline() ? System.out : System.err;
-        boolean ansi = options.color();
+        boolean ansi = options.colors();
         boolean[] inChannel = {false};
         boolean[] emitted = {false};
         return token -> {
             if (token == channelOpen) {
-                onThinkingStart(thoughtOut, ansi);
+                if (thinkEnabled) {
+                    onThinkingStart(thoughtOut, ansi);
+                }
                 inChannel[0] = true;
                 emitted[0] = false;
                 return;
             }
             if (token == channelClose) {
-                onThinkingEnd(thoughtOut, ansi, emitted[0]);
+                if (thinkEnabled) {
+                    onThinkingEnd(thoughtOut, ansi, emitted[0]);
+                }
                 inChannel[0] = false;
                 emitted[0] = false;
                 return;
@@ -3242,8 +3244,10 @@ public class Gemma4 {
             if (!tokenizer.isSpecialToken(token)) {
                 String text = tokenizer.decode(List.of(token));
                 if (inChannel[0]) {
-                    thoughtOut.print(text);
-                    emitted[0] = true;
+                    if (thinkEnabled) {
+                        thoughtOut.print(text);
+                        emitted[0] = true;
+                    }
                 } else {
                     System.out.print(text);
                 }
@@ -3305,7 +3309,7 @@ public class Gemma4 {
 
             Set<Integer> stopTokens = chatFormat.getStopTokens();
             IntConsumer printer = streamingPrinter(model.tokenizer(), options);
-            List<Integer> responseTokens = Llama.generateTokens(model, state, startPosition, conversationTokens.subList(startPosition, conversationTokens.size()), stopTokens, options.maxTokens(), sampler, options.echo(), options.color(), printer);
+            List<Integer> responseTokens = Llama.generateTokens(model, state, startPosition, conversationTokens.subList(startPosition, conversationTokens.size()), stopTokens, options.maxTokens(), sampler, options.echo(), options.colors(), printer);
             Integer stopToken = null;
             if (!responseTokens.isEmpty() && stopTokens.contains(responseTokens.getLast())) {
                 stopToken = responseTokens.getLast();
@@ -3347,7 +3351,7 @@ public class Gemma4 {
 
         Set<Integer> stopTokens = chatFormat.getStopTokens();
         IntConsumer printer = streamingPrinter(model.tokenizer(), options);
-        List<Integer> responseTokens = Llama.generateTokens(model, state, 0, promptTokens, stopTokens, options.maxTokens(), sampler, options.echo(), options.color(), printer);
+        List<Integer> responseTokens = Llama.generateTokens(model, state, 0, promptTokens, stopTokens, options.maxTokens(), sampler, options.echo(), options.colors(), printer);
         if (!responseTokens.isEmpty() && stopTokens.contains(responseTokens.getLast())) {
             responseTokens.removeLast();
         }
@@ -3362,7 +3366,7 @@ public class Gemma4 {
 
     record Options(Path modelPath, String prompt, String suffix, String systemPrompt, boolean interactive,
                    float temperature, float topp, long seed, int maxTokens, boolean stream, boolean echo,
-                   boolean think, boolean thinkInline, boolean color) {
+                   boolean think, boolean thinkInline, boolean colors) {
 
         Options {
             require(modelPath != null, "Missing argument: --model <path> is required");
@@ -3565,3 +3569,4 @@ final class AOT {
         }
     }
 }
+
