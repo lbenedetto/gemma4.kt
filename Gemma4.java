@@ -3372,7 +3372,7 @@ public class Gemma4 {
             boolean interactive = false;
             boolean stream = true;
             boolean echo = false;
-            boolean think = false;
+            boolean think = true;
             boolean thinkInline = false;
             String colorMode = "auto";
 
