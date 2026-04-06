@@ -1600,6 +1600,10 @@ abstract class FloatTensor {
         return UNSAFE.getShort(memorySegment.address() + offset);
     }
 
+    static float readFloat16(MemorySegment memorySegment, long offset) {
+        return Float.float16ToFloat(readShort(memorySegment, offset));
+    }
+
     static byte readByte(MemorySegment memorySegment, long offset) {
         return UNSAFE.getByte(memorySegment.address() + offset);
     }
@@ -1797,7 +1801,7 @@ final class Q4_0FloatTensor extends FloatTensor {
         assert 0 <= index && index < size;
         long blockIndex = index / GGMLType.Q4_0.getBlockSize();
         long blockOffset = blockIndex * GGMLType.Q4_0.getTypeSize();
-        float scale = Float.float16ToFloat(readShort(memorySegment, blockOffset));
+        float scale = readFloat16(memorySegment, blockOffset);
         byte quant;
         int modIndex = (int) (index % GGMLType.Q4_0.getBlockSize());
         if (modIndex < GGMLType.Q4_0.getBlockSize() / 2) {
@@ -1834,7 +1838,7 @@ final class Q4_0FloatTensor extends FloatTensor {
         long blockOffset = (long) (thisOffset + j) / GGMLType.Q4_0.getBlockSize() * GGMLType.Q4_0.getTypeSize();
         int upperBound = j + (size - j) / GGMLType.Q4_0.getBlockSize() * GGMLType.Q4_0.getBlockSize();
         for (; j < upperBound; j += GGMLType.Q4_0.getBlockSize(), blockOffset += GGMLType.Q4_0.getTypeSize()) {
-            float wScaleValue = Float.float16ToFloat(readShort(thiz.memorySegment, blockOffset));
+                    float wScaleValue = readFloat16(thiz.memorySegment, blockOffset);
             var wScale = FloatVector.broadcast(F_SPECIES, wScaleValue);
             var wBytes = ByteVector.fromMemorySegment(ByteVector.SPECIES_128, thiz.memorySegment, blockOffset + Float16.BYTES, ByteOrder.LITTLE_ENDIAN);
             var loBytes = wBytes.and((byte) 0xF).sub((byte) 8);
@@ -1895,8 +1899,8 @@ final class Q4_1FloatTensor extends FloatTensor {
         assert 0 <= index && index < size;
         long blockIndex = index / GGMLType.Q4_1.getBlockSize();
         long blockOffset = blockIndex * GGMLType.Q4_1.getTypeSize();
-        float delta = Float.float16ToFloat(readShort(memorySegment, blockOffset));
-        float min = Float.float16ToFloat(readShort(memorySegment, blockOffset + Float16.BYTES));
+        float delta = readFloat16(memorySegment, blockOffset);
+        float min = readFloat16(memorySegment, blockOffset + Float16.BYTES);
         int modIndex = (int) (index % GGMLType.Q4_1.getBlockSize());
         int quant;
         if (modIndex < 16) {
@@ -1932,8 +1936,8 @@ final class Q4_1FloatTensor extends FloatTensor {
         long blockOffset = (long) (thisOffset + j) / GGMLType.Q4_1.getBlockSize() * GGMLType.Q4_1.getTypeSize();
         int upperBound = j + (size - j) / GGMLType.Q4_1.getBlockSize() * GGMLType.Q4_1.getBlockSize();
         for (; j < upperBound; j += GGMLType.Q4_1.getBlockSize(), blockOffset += GGMLType.Q4_1.getTypeSize()) {
-            float deltaValue = Float.float16ToFloat(readShort(thiz.memorySegment, blockOffset));
-            float minValue = Float.float16ToFloat(readShort(thiz.memorySegment, blockOffset + Float16.BYTES));
+            float deltaValue = readFloat16(thiz.memorySegment, blockOffset);
+            float minValue = readFloat16(thiz.memorySegment, blockOffset + Float16.BYTES);
             var wDelta = FloatVector.broadcast(F_SPECIES, deltaValue);
             var wMin = FloatVector.broadcast(F_SPECIES, minValue);
             var wBytes = ByteVector.fromMemorySegment(ByteVector.SPECIES_128, thiz.memorySegment, blockOffset + 2 * Float16.BYTES, ByteOrder.LITTLE_ENDIAN);
@@ -2028,8 +2032,8 @@ final class Q4_KFloatTensor extends FloatTensor {
         long blockIndex = index / BLOCK_SIZE;
         int withinBlock = (int) (index % BLOCK_SIZE);
         long blockOffset = blockIndex * TYPE_SIZE;
-        float d = Float.float16ToFloat(readShort(memorySegment, blockOffset));
-        float dmin = Float.float16ToFloat(readShort(memorySegment, blockOffset + 2));
+        float d = readFloat16(memorySegment, blockOffset);
+        float dmin = readFloat16(memorySegment, blockOffset + 2);
         long scalesOffset = blockOffset + 4;
         long qsOffset = blockOffset + 16; // 4 + 12
 
@@ -2085,8 +2089,8 @@ final class Q4_KFloatTensor extends FloatTensor {
         int upperBound = j + (size - j) / BLOCK_SIZE * BLOCK_SIZE;
 
         for (; j < upperBound; j += BLOCK_SIZE, blockOffset += TYPE_SIZE) {
-            float d = Float.float16ToFloat(readShort(thiz.memorySegment, blockOffset));
-            float dmin = Float.float16ToFloat(readShort(thiz.memorySegment, blockOffset + 2));
+            float d = readFloat16(thiz.memorySegment, blockOffset);
+            float dmin = readFloat16(thiz.memorySegment, blockOffset + 2);
             long scalesOff = blockOffset + 4;
             long qsOff = blockOffset + 16;
 
@@ -2179,8 +2183,8 @@ final class Q5_KFloatTensor extends FloatTensor {
         long blockIndex = index / BLOCK_SIZE;
         int withinBlock = (int) (index % BLOCK_SIZE);
         long blockOffset = blockIndex * TYPE_SIZE;
-        float d = Float.float16ToFloat(readShort(memorySegment, blockOffset));
-        float dmin = Float.float16ToFloat(readShort(memorySegment, blockOffset + 2));
+        float d = readFloat16(memorySegment, blockOffset);
+        float dmin = readFloat16(memorySegment, blockOffset + 2);
         long scalesOffset = blockOffset + 4;
         long qhOffset = blockOffset + 16;  // 4 + 12
         long qsOffset = blockOffset + 48;  // 4 + 12 + 32
@@ -2230,8 +2234,8 @@ final class Q5_KFloatTensor extends FloatTensor {
         int upperBound = j + (size - j) / BLOCK_SIZE * BLOCK_SIZE;
 
         for (; j < upperBound; j += BLOCK_SIZE, blockOffset += TYPE_SIZE) {
-            float d = Float.float16ToFloat(readShort(thiz.memorySegment, blockOffset));
-            float dmin = Float.float16ToFloat(readShort(thiz.memorySegment, blockOffset + 2));
+            float d = readFloat16(thiz.memorySegment, blockOffset);
+            float dmin = readFloat16(thiz.memorySegment, blockOffset + 2);
             long scalesOff = blockOffset + 4;
             long qhOff = blockOffset + 16;
             long qsOff = blockOffset + 48;
@@ -2337,7 +2341,7 @@ final class Q6_KFloatTensor extends FloatTensor {
         long qlOff = blockOffset;
         long qhOff = blockOffset + 128;
         long scOff = blockOffset + 192;
-        float d = Float.float16ToFloat(readShort(memorySegment, blockOffset + 208));
+        float d = readFloat16(memorySegment, blockOffset + 208);
 
         int half = withinBlock / 128;
         int rem128 = withinBlock % 128;
@@ -2545,7 +2549,7 @@ final class Q8_0FloatTensor extends FloatTensor {
         long withinBlockIndex = index % GGMLType.Q8_0.getBlockSize();
         long blockOffset = blockIndex * GGMLType.Q8_0.getTypeSize();
         byte quant = readByte(memorySegment, blockOffset + Float16.BYTES + withinBlockIndex);
-        float scale = Float.float16ToFloat(readShort(memorySegment, blockOffset));
+        float scale = readFloat16(memorySegment, blockOffset);
         return quant * scale;
     }
 
@@ -2574,7 +2578,7 @@ final class Q8_0FloatTensor extends FloatTensor {
         long blockOffset = (long) (thisOffset + j) / GGMLType.Q8_0.getBlockSize() * GGMLType.Q8_0.getTypeSize();
         int upperBound = j + (size - j) / GGMLType.Q8_0.getBlockSize() * GGMLType.Q8_0.getBlockSize();
         for (; j < upperBound; j += GGMLType.Q8_0.getBlockSize(), blockOffset += GGMLType.Q8_0.getTypeSize()) {
-            float wScaleValue = Float.float16ToFloat(readShort(thiz.memorySegment, blockOffset));
+            float wScaleValue = readFloat16(thiz.memorySegment, blockOffset);
             var wScale = FloatVector.broadcast(F_SPECIES, wScaleValue);
             switch (F_SPECIES.vectorBitSize()) {
                 case 512 -> {
@@ -2684,7 +2688,7 @@ final class F16FloatTensor extends FloatTensor {
     @Override
     public float getFloat(long index) {
         assert 0 <= index && index < size;
-        return Float.float16ToFloat(readShort(memorySegment, (long) index * 2));
+        return readFloat16(memorySegment, (long) index * 2);
     }
 
     @Override
