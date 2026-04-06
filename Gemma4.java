@@ -1495,7 +1495,7 @@ enum GGMLType {
     UNSUPPORTED_Q4_2(Integer.MAX_VALUE), // 4 - removed
     UNSUPPORTED_Q4_3(Integer.MAX_VALUE), // 5 - removed
     Q5_0(Integer.MAX_VALUE),   // 6
-    Q5_1(Integer.MAX_VALUE),   // 7
+    Q5_1(2 * Float16.BYTES + Integer.BYTES + 16 * Byte.BYTES, 32),   // 7
     Q8_0(Float16.BYTES + 32 * Byte.BYTES, 32),  // 8
     Q8_1(32 * Byte.BYTES + 2 * Float.BYTES, 32), // 9
     Q2_K(Integer.MAX_VALUE),   // 10
@@ -1518,7 +1518,17 @@ enum GGMLType {
     I64(Long.BYTES),            // 27
     F64(Double.BYTES),          // 28
     IQ1_M(Integer.MAX_VALUE),   // 29
-    BF16(Float16.BYTES);        // 30
+    BF16(Float16.BYTES),        // 30
+    UNSUPPORTED_Q4_0_4_4(Integer.MAX_VALUE), // 31 - removed from gguf files
+    UNSUPPORTED_Q4_0_4_8(Integer.MAX_VALUE), // 32
+    UNSUPPORTED_Q4_0_8_8(Integer.MAX_VALUE), // 33
+    TQ1_0(Integer.MAX_VALUE),   // 34
+    TQ2_0(Integer.MAX_VALUE),   // 35
+    UNSUPPORTED_IQ4_NL_4_4(Integer.MAX_VALUE), // 36
+    UNSUPPORTED_IQ4_NL_4_8(Integer.MAX_VALUE), // 37
+    UNSUPPORTED_IQ4_NL_8_8(Integer.MAX_VALUE), // 38
+    MXFP4(Byte.BYTES + GGMLType.QK_MXFP4 / 2, GGMLType.QK_MXFP4), // 39
+    NVFP4(Integer.MAX_VALUE);   // 40
 
     private static final GGMLType[] VALUES = values();
 
@@ -1535,7 +1545,10 @@ enum GGMLType {
     }
 
     public static GGMLType fromId(int id) {
-        return VALUES[id];
+        if (0 <= id && id < VALUES.length) {
+            return VALUES[id];
+        }
+        throw new UnsupportedOperationException("Unsupported GGML tensor type id: " + id);
     }
 
     GGMLType(int typeSize) {
@@ -1549,6 +1562,7 @@ enum GGMLType {
     }
 
     public static final int QK_K = 256;
+    public static final int QK_MXFP4 = 32;
 
     GGMLType(int typeSize, int blockSize) {
         assert blockSize > 0;
