@@ -19,19 +19,15 @@ Fast, zero-dependency, inference engine for [Gemma 4](https://ai.google.dev/gemm
 
 ## Features
 
-- Single file, no dependencies
-- [GGUF format](https://github.com/ggerganov/ggml/blob/master/docs/gguf.md) parser
-- Gemma 4 tokenizer
-- Supports all Gemma 4 model families: `E2B`, `E4B`, `31B`, and `26B-A4B` (MoE)
-- Mixture of Experts routing and execution
-- Sliding Window Attention (SWA) and full-attention layers
-- Per-layer KV cache sharing and per-head Q/K RMS normalization
+- Single file, **no dependencies**, based on [llama3.java](https://github.com/mukel/llama3.java)
+- Supports **all** Gemma 4 model families: `E2B`, `E4B`, `31B`, and `26B-A4B` (MoE)
+- Fast [GGUF format](https://github.com/ggerganov/ggml/blob/master/docs/gguf.md) parser
 - Supported dtypes/quantizations: `F16`, `BF16`, `F32`, `Q4_0`, `Q4_1`, `Q4_K`, `Q5_K`, `Q6_K`, `Q8_0`
-- Thinking mode control with `--think off|on|inline`
 - Matrix-vector kernels using Java's [Vector API](https://openjdk.org/jeps/469)
-- CLI with `--chat` and `--instruct` modes
+- CLI with `--chat` and `--prompt` modes
+- Thinking mode control with `--think off|on|inline`
 - GraalVM Native Image support
-- AOT model preloading for lower time-to-first-token
+- AOT model preloading for **instant time-to-first-token**
 
 ## Setup
 
@@ -100,7 +96,7 @@ PRELOAD_GGUF=/path/to/model.gguf make native
 ```
 
 A larger specialized binary is generated with parse overhead removed for that specific model.
-It can still run other models with normal parsing behavior.
+It can still run other models with the usual parsing overhead.
 
 ## Benchmarks
 
