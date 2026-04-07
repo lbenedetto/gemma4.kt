@@ -56,7 +56,16 @@ Pick any supported target quantization, for example `Q4_0`, `Q4_1`, `Q4_K`, `Q5_
 
 Java 21+ is required, in particular for the [`MemorySegment` mmap-ing feature](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/nio/channels/FileChannel.html#map(java.nio.channels.FileChannel.MapMode,long,long,java.lang.foreign.Arena)).
 
-[`jbang`](https://www.jbang.dev/) is a good fit for this use case:
+[`jbang`](https://www.jbang.dev/) is a good fit for this use case.
+
+No-setup one-liner, no git clone, no manual model download required ... ~5GB download once, then cached by `jbang`:
+```bash
+jbang gemma4@mukel \
+    --model %https://hf.co/unsloth/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-Q8_0.gguf \
+    --system-prompt "reply like master Yoda" \
+    --chat
+```
+Alternatively:
 ```
 jbang Gemma4.java --help
 jbang Gemma4.java --model ./gemma-4-E2B-it-Q4_0.gguf --chat
