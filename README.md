@@ -62,7 +62,7 @@ No-setup one-liner, no git clone, no manual model download required ... ~5GB dow
 ```bash
 jbang gemma4@mukel \
     --model %https://hf.co/unsloth/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-Q8_0.gguf \
-    --system-prompt "reply like master Yoda" \
+    --system-prompt "like Master Yoda, reply you must" \
     --chat
 ```
 Alternatively:
