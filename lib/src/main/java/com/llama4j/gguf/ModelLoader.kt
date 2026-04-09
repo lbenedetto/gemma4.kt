@@ -8,6 +8,7 @@ import com.llama4j.model.LlamaWeights
 import com.llama4j.model.RoPE
 import com.llama4j.tokenizer.GemmaTokenizer
 import com.llama4j.tokenizer.Vocabulary
+import com.llama4j.util.Timer
 import java.io.IOException
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
@@ -19,16 +20,16 @@ import java.util.function.IntFunction
 
 object ModelLoader {
   private fun loadVocabulary(metadata: MutableMap<String, Any>): Vocabulary {
-    val tokens = Objects.requireNonNull<Array<String>>(metadata.get("tokenizer.ggml.tokens") as Array<String?>)
-    val scores = Objects.requireNonNull<FloatArray>(metadata.get("tokenizer.ggml.scores") as FloatArray)
+    val tokens = metadata["tokenizer.ggml.tokens"]!! as Array<String>
+    val scores = metadata["tokenizer.ggml.scores"] as FloatArray
     return Vocabulary(tokens, scores)
   }
 
   @Throws(IOException::class)
   fun loadModel(ggufPath: Path, contextLength: Int): Llama {
-    log("Load Gemma4 model").use { ignored ->
+    Timer.log("Load Gemma4 model").use {
       FileChannel.open(ggufPath, StandardOpenOption.READ).use { fileChannel ->
-        val gguf: GGUF = GGUF.Companion.loadModel(fileChannel, ggufPath.toString())
+        val gguf: GGUF = GGUF.loadModel(fileChannel, ggufPath.toString())
         return loadModel(fileChannel, gguf, contextLength, true)
       }
     }
@@ -42,18 +43,18 @@ object ModelLoader {
     val vocabulary = loadVocabulary(metadata)
     val tokenizer = createTokenizer(metadata, vocabulary)
 
-    val modelContextLength = Objects.requireNonNull<Any>(metadata.get("gemma4.context_length")) as Int
-    if (contextLength < 0 || modelContextLength < contextLength) {
+    val modelContextLength = metadata["gemma4.context_length"] as Int
+    if (contextLength !in 0..modelContextLength) {
       contextLength = modelContextLength
     }
 
-    val embeddingLength = Objects.requireNonNull<Any>(metadata.get("gemma4.embedding_length")) as Int
-    val numberOfHeads = Objects.requireNonNull<Any>(metadata.get("gemma4.attention.head_count")) as Int
-    val numberOfLayers = Objects.requireNonNull<Any>(metadata.get("gemma4.block_count")) as Int
+    val embeddingLength = metadata["gemma4.embedding_length"] as Int
+    val numberOfHeads = metadata["gemma4.attention.head_count"] as Int
+    val numberOfLayers = metadata["gemma4.block_count"] as Int
 
-    val headSizeFull = Objects.requireNonNull<Any>(metadata.get("gemma4.attention.key_length")) as Int
-    val headSizeSWA = Objects.requireNonNull<Any>(metadata.get("gemma4.attention.key_length_swa")) as Int
-    val slidingWindow = Objects.requireNonNull<Any>(metadata.get("gemma4.attention.sliding_window")) as Int
+    val headSizeFull = metadata["gemma4.attention.key_length"] as Int
+    val headSizeSWA = metadata["gemma4.attention.key_length_swa"] as Int
+    val slidingWindow = metadata["gemma4.attention.sliding_window"] as Int
     val logitSoftcapping = metadata.getOrDefault("gemma4.final_logit_softcapping", 0f) as Float
     val rmsNormEps = metadata.getOrDefault("gemma4.attention.layer_norm_rms_epsilon", 1e-6f) as Float
     val ropeTheta = metadata.getOrDefault("gemma4.rope.freq_base", 1000000f) as Float
@@ -71,7 +72,7 @@ object ModelLoader {
       feedForwardLength = ffnRaw
     } else {
       feedForwardLength = IntArray(numberOfLayers)
-      Arrays.fill(feedForwardLength, Objects.requireNonNull<Any>(ffnRaw) as Int)
+      Arrays.fill(feedForwardLength, ffnRaw!! as Int)
     }
 
     val tensorInfos = gguf.getTensorInfos()
@@ -87,7 +88,7 @@ object ModelLoader {
       for (i in 0..<numberOfLayers) {
         val qNorm = tensorInfos.get("blk." + i + ".attn_q_norm.weight")
         if (qNorm != null) {
-          val qNormSize: Long = FloatTensor.Companion.numberOfElementsLong(*qNorm.dimensions)
+          val qNormSize: Long = FloatTensor.numberOfElementsLong(*qNorm.dimensions)
           isSWA[i] = (qNormSize == headSizeSWA.toLong())
         } else {
           isSWA[i] = (i % 5 != 4) // fallback
@@ -141,9 +142,9 @@ object ModelLoader {
       return Llama(config, tokenizer, null)
     }
 
-    val tensorEntries: MutableMap<String, GGMLTensorEntry> = GGUF.Companion.loadTensors(
-      Objects.requireNonNull<FileChannel?>(fileChannel),
-      gguf.getTensorDataOffset(),
+    val tensorEntries: MutableMap<String, GGMLTensorEntry> = GGUF.loadTensors(
+      fileChannel!!,
+      gguf.tensorDataOffset,
       tensorInfos
     )
     val qw = loadWeights(tensorEntries, config)
@@ -152,7 +153,7 @@ object ModelLoader {
 
   fun loadWeights(tensorEntries: MutableMap<String, GGMLTensorEntry>, config: LlamaConfiguration): LlamaWeights {
     val ropeFreqsSWA = RoPE.precomputeFreqsCis(config.contextLength, config.headSizeSWA, config.ropeThetaSWA.toDouble())
-    val ropeFreqsBuf = toFloatBuffer(Objects.requireNonNull<GGMLTensorEntry>(tensorEntries.get("rope_freqs.weight")))
+    val ropeFreqsBuf = toFloatBuffer(tensorEntries["rope_freqs.weight"]!!)
     val modelRopeFreqs = FloatArray(ropeFreqsBuf.remaining())
     ropeFreqsBuf.get(modelRopeFreqs)
     val ropeFreqsFull = RoPE.precomputeFreqsCisFromFreqs(
@@ -165,18 +166,20 @@ object ModelLoader {
   }
 
   fun loadWeightsWithRoPE(
-    tensorEntries: MutableMap<String, GGMLTensorEntry>, config: LlamaConfiguration,
-    ropeFreqsSWA: Pair<FloatArray, FloatArray>, ropeFreqsFull: Pair<FloatArray, FloatArray>
+    tensorEntries: MutableMap<String, GGMLTensorEntry>,
+    config: LlamaConfiguration,
+    ropeFreqsSWA: Pair<FloatArray, FloatArray>,
+    ropeFreqsFull: Pair<FloatArray, FloatArray>
   ): LlamaWeights {
     val numberOfLayers = config.numberOfLayers
 
     val tokenEmbeddingTable =
-      loadQuantized(Objects.requireNonNull<GGMLTensorEntry>(tensorEntries.get("token_embd.weight")))
+      loadQuantized(tensorEntries["token_embd.weight"]!!)
 
     // Load per-layer output scale (scalar per layer)
     val layerOutputScale = FloatArray(config.numberOfLayers)
     for (i in 0..<config.numberOfLayers) {
-      val scaleEntry = tensorEntries.get("blk." + i + ".layer_output_scale.weight")
+      val scaleEntry = tensorEntries["blk.$i.layer_output_scale.weight"]
       if (scaleEntry != null) {
         layerOutputScale[i] = toFloatBuffer(scaleEntry).get(0)
       } else {
@@ -188,119 +191,70 @@ object ModelLoader {
     var perLayerTokenEmbd: FloatTensor? = null
     var perLayerModelProj: FloatTensor? = null
     var perLayerProjNorm: FloatBuffer? = null
-    var perLayerInpGate: Array<FloatTensor> = null
-    var perLayerProj: Array<FloatTensor> = null
-    var perLayerPostNorm: Array<FloatBuffer> = null
+    var perLayerInpGate: Array<FloatTensor>? = null
+    var perLayerProj: Array<FloatTensor>? = null
+    var perLayerPostNorm: Array<FloatBuffer>? = null
 
     if (config.embeddingLengthPerLayer > 0 && tensorEntries.containsKey("per_layer_token_embd.weight")) {
-      perLayerTokenEmbd =
-        loadQuantized(Objects.requireNonNull<GGMLTensorEntry>(tensorEntries.get("per_layer_token_embd.weight")))
-      perLayerModelProj =
-        loadQuantized(Objects.requireNonNull<GGMLTensorEntry>(tensorEntries.get("per_layer_model_proj.weight")))
-      perLayerProjNorm =
-        toFloatBuffer(Objects.requireNonNull<GGMLTensorEntry>(tensorEntries.get("per_layer_proj_norm.weight")))
-      perLayerInpGate = loadArrayOfQuantized(
-        config.numberOfLayers,
-        IntFunction { i: Int -> Objects.requireNonNull<GGMLTensorEntry>(tensorEntries.get("blk." + i + ".inp_gate.weight")) })
-      perLayerProj = loadArrayOfQuantized(
-        config.numberOfLayers,
-        IntFunction { i: Int -> Objects.requireNonNull<GGMLTensorEntry>(tensorEntries.get("blk." + i + ".proj.weight")) })
-      perLayerPostNorm = loadArrayOfFloatBuffer(
-        config.numberOfLayers,
-        IntFunction { i: Int -> Objects.requireNonNull<GGMLTensorEntry>(tensorEntries.get("blk." + i + ".post_norm.weight")) })
+      perLayerTokenEmbd = loadQuantized(tensorEntries["per_layer_token_embd.weight"]!!)
+      perLayerModelProj = loadQuantized(tensorEntries["per_layer_model_proj.weight"]!!)
+      perLayerProjNorm = toFloatBuffer(tensorEntries["per_layer_proj_norm.weight"]!!)
+      perLayerInpGate = loadArrayOfQuantized(config.numberOfLayers) { tensorEntries["blk.$it.inp_gate.weight"] }
+      perLayerProj = loadArrayOfQuantized(config.numberOfLayers) { tensorEntries["blk.$it.proj.weight"] }
+      perLayerPostNorm = loadArrayOfFloatBuffer(config.numberOfLayers) { tensorEntries["blk.$it.post_norm.weight"] }
     }
 
     // Load V weights (nullable: layers without V use K as V)
     val wv = arrayOfNulls<FloatTensor>(numberOfLayers)
     for (i in 0..<numberOfLayers) {
-      val vEntry = tensorEntries.get("blk." + i + ".attn_v.weight")
+      val vEntry = tensorEntries["blk.$i.attn_v.weight"]
       wv[i] = if (vEntry != null) loadQuantized(vEntry) else null
     }
 
     // Load MoE weights (if present)
-    var ffnGateInp: Array<FloatTensor> = null
-    var ffnGateInpScale: Array<FloatBuffer> = null
-    var ffnGateUpExps: Array<FloatTensor> = null
-    var ffnDownExps: Array<FloatTensor> = null
-    var ffnDownExpsScale: Array<FloatBuffer> = null
-    var ffnPostNorm1: Array<FloatBuffer> = null
-    var preFfwNorm2: Array<FloatBuffer> = null
-    var ffnPostNorm2: Array<FloatBuffer> = null
+    var ffnGateInp: Array<FloatTensor>? = null
+    var ffnGateInpScale: Array<FloatBuffer>? = null
+    var ffnGateUpExps: Array<FloatTensor>? = null
+    var ffnDownExps: Array<FloatTensor>? = null
+    var ffnDownExpsScale: Array<FloatBuffer>? = null
+    var ffnPostNorm1: Array<FloatBuffer>? = null
+    var preFfwNorm2: Array<FloatBuffer>? = null
+    var ffnPostNorm2: Array<FloatBuffer>? = null
 
-    if (config.isMoE()) {
-      ffnGateInp = loadArrayOfQuantized(
-        numberOfLayers,
-        IntFunction { i: Int -> tensorEntries.get("blk." + i + ".ffn_gate_inp.weight") })
-      ffnGateInpScale = loadArrayOfFloatBuffer(
-        numberOfLayers,
-        IntFunction { i: Int -> tensorEntries.get("blk." + i + ".ffn_gate_inp.scale") })
-      ffnGateUpExps = loadArrayOfQuantized(
-        numberOfLayers,
-        IntFunction { i: Int -> tensorEntries.get("blk." + i + ".ffn_gate_up_exps.weight") })
-      ffnDownExps = loadArrayOfQuantized(
-        numberOfLayers,
-        IntFunction { i: Int -> tensorEntries.get("blk." + i + ".ffn_down_exps.weight") })
-      ffnDownExpsScale = loadArrayOfFloatBuffer(
-        numberOfLayers,
-        IntFunction { i: Int -> tensorEntries.get("blk." + i + ".ffn_down_exps.scale") })
-      ffnPostNorm1 = loadArrayOfFloatBuffer(
-        numberOfLayers,
-        IntFunction { i: Int -> tensorEntries.get("blk." + i + ".post_ffw_norm_1.weight") })
-      preFfwNorm2 = loadArrayOfFloatBuffer(
-        numberOfLayers,
-        IntFunction { i: Int -> tensorEntries.get("blk." + i + ".pre_ffw_norm_2.weight") })
-      ffnPostNorm2 = loadArrayOfFloatBuffer(
-        numberOfLayers,
-        IntFunction { i: Int -> tensorEntries.get("blk." + i + ".post_ffw_norm_2.weight") })
+    if (config.isMoE) {
+      ffnGateInp = loadArrayOfQuantized(numberOfLayers) { tensorEntries["blk.$it.ffn_gate_inp.weight"] }
+      ffnGateInpScale = loadArrayOfFloatBuffer(numberOfLayers) { tensorEntries["blk.$it.ffn_gate_inp.scale"] }
+      ffnGateUpExps = loadArrayOfQuantized(numberOfLayers) { tensorEntries["blk.$it.ffn_gate_up_exps.weight"] }
+      ffnDownExps = loadArrayOfQuantized(numberOfLayers) { tensorEntries["blk.$it.ffn_down_exps.weight"] }
+      ffnDownExpsScale = loadArrayOfFloatBuffer(numberOfLayers) { tensorEntries["blk.$it.ffn_down_exps.scale"] }
+      ffnPostNorm1 = loadArrayOfFloatBuffer(numberOfLayers) { tensorEntries["blk.$it.post_ffw_norm_1.weight"] }
+      preFfwNorm2 = loadArrayOfFloatBuffer(numberOfLayers) { tensorEntries["blk.$it.pre_ffw_norm_2.weight"] }
+      ffnPostNorm2 = loadArrayOfFloatBuffer(numberOfLayers) { tensorEntries["blk.$it.post_ffw_norm_2.weight"] }
     }
 
     return LlamaWeights(
       tokenEmbeddingTable,
-      loadArrayOfFloatBuffer(
-        config.numberOfLayers,
-        IntFunction { i: Int -> tensorEntries.get("blk." + i + ".attn_norm.weight") }),
-      loadArrayOfQuantized(
-        config.numberOfLayers,
-        IntFunction { i: Int -> tensorEntries.get("blk." + i + ".attn_q.weight") }),
-      loadArrayOfQuantized(
-        config.numberOfLayers,
-        IntFunction { i: Int -> tensorEntries.get("blk." + i + ".attn_k.weight") }),
+      loadArrayOfFloatBuffer(config.numberOfLayers) { tensorEntries["blk.$it.attn_norm.weight"] },
+      loadArrayOfQuantized(config.numberOfLayers) { tensorEntries["blk.$it.attn_q.weight"] },
+      loadArrayOfQuantized(config.numberOfLayers) { tensorEntries["blk.$it.attn_k.weight"] },
       wv,
-      loadArrayOfQuantized(
-        config.numberOfLayers,
-        IntFunction { i: Int -> tensorEntries.get("blk." + i + ".attn_output.weight") }),
-      loadArrayOfFloatBuffer(
-        config.numberOfLayers,
-        IntFunction { i: Int -> tensorEntries.get("blk." + i + ".attn_q_norm.weight") }),
-      loadArrayOfFloatBuffer(
-        config.numberOfLayers,
-        IntFunction { i: Int -> tensorEntries.get("blk." + i + ".attn_k_norm.weight") }),
-      loadArrayOfFloatBuffer(
-        config.numberOfLayers,
-        IntFunction { i: Int -> tensorEntries.get("blk." + i + ".post_attention_norm.weight") }),
-      loadArrayOfFloatBuffer(
-        config.numberOfLayers,
-        IntFunction { i: Int -> tensorEntries.get("blk." + i + ".ffn_norm.weight") }),
-      loadArrayOfQuantized(
-        config.numberOfLayers,
-        IntFunction { i: Int -> tensorEntries.get("blk." + i + ".ffn_gate.weight") }),
-      loadArrayOfQuantized(
-        config.numberOfLayers,
-        IntFunction { i: Int -> tensorEntries.get("blk." + i + ".ffn_down.weight") }),
-      loadArrayOfQuantized(
-        config.numberOfLayers,
-        IntFunction { i: Int -> tensorEntries.get("blk." + i + ".ffn_up.weight") }),
-      loadArrayOfFloatBuffer(
-        config.numberOfLayers,
-        IntFunction { i: Int -> tensorEntries.get("blk." + i + ".post_ffw_norm.weight") }),
-      toFloatBuffer(Objects.requireNonNull<GGMLTensorEntry>(tensorEntries.get("output_norm.weight"))),
+      loadArrayOfQuantized(config.numberOfLayers) { tensorEntries["blk.$it.attn_output.weight"] },
+      loadArrayOfFloatBuffer(config.numberOfLayers) { tensorEntries["blk.$it.attn_q_norm.weight"] },
+      loadArrayOfFloatBuffer(config.numberOfLayers) { tensorEntries["blk.$it.attn_k_norm.weight"] },
+      loadArrayOfFloatBuffer(config.numberOfLayers) { tensorEntries["blk.$it.post_attention_norm.weight"] },
+      loadArrayOfFloatBuffer(config.numberOfLayers) { tensorEntries["blk.$it.ffn_norm.weight"] },
+      loadArrayOfQuantized(config.numberOfLayers) { tensorEntries["blk.$it.ffn_gate.weight"] },
+      loadArrayOfQuantized(config.numberOfLayers) { tensorEntries["blk.$it.ffn_down.weight"] },
+      loadArrayOfQuantized(config.numberOfLayers) { tensorEntries["blk.$it.ffn_up.weight"] },
+      loadArrayOfFloatBuffer(config.numberOfLayers) { tensorEntries["blk.$it.post_ffw_norm.weight"] },
+      toFloatBuffer(tensorEntries["output_norm.weight"]!!),
       layerOutputScale,
       FloatBuffer.wrap(ropeFreqsFull.first),
       FloatBuffer.wrap(ropeFreqsFull.second),
       FloatBuffer.wrap(ropeFreqsSWA.first),
       FloatBuffer.wrap(ropeFreqsSWA.second),
       if (tensorEntries.containsKey("output.weight"))
-        ModelLoader.loadQuantized(tensorEntries.get("output.weight")!!)
+        loadQuantized(tensorEntries["output.weight"]!!)
       else
         tokenEmbeddingTable,
       perLayerTokenEmbd, perLayerModelProj, perLayerProjNorm,
@@ -311,7 +265,7 @@ object ModelLoader {
   }
 
   private fun createTokenizer(metadata: MutableMap<String, Any>, vocabulary: Vocabulary): GemmaTokenizer {
-    val tokenTypes = Objects.requireNonNull<Any>(metadata.get("tokenizer.ggml.token_type")) as IntArray
+    val tokenTypes = metadata["tokenizer.ggml.token_type"] as IntArray
     return GemmaTokenizer(vocabulary, tokenTypes)
   }
 
@@ -321,26 +275,17 @@ object ModelLoader {
   }
 
   fun loadArrayOfQuantized(size: Int, getTensorEntry: IntFunction<GGMLTensorEntry>): Array<FloatTensor> {
-    val array: Array<FloatTensor> = arrayOfNulls<FloatTensor>(size)
-    for (i in 0..<size) {
-      array[i] = loadQuantized(getTensorEntry.apply(i))
-    }
-    return array
+    return Array(size) { loadQuantized(getTensorEntry.apply(it)) }
   }
 
   fun loadArrayOfFloatBuffer(size: Int, getTensorEntry: IntFunction<GGMLTensorEntry>): Array<FloatBuffer> {
-    val array: Array<FloatBuffer> = arrayOfNulls<FloatBuffer>(size)
-    for (i in 0..<size) {
-      array[i] = toFloatBuffer(getTensorEntry.apply(i))
-    }
-    return array
+    return Array(size) { toFloatBuffer(getTensorEntry.apply(it)) }
   }
 
   fun toFloatBuffer(tensorEntry: GGMLTensorEntry): FloatBuffer {
-    val ggmlType = tensorEntry.ggmlType
-    return when (ggmlType) {
+    return when (val ggmlType = tensorEntry.ggmlType) {
       GGMLType.F32 -> tensorEntry.memorySegment.asByteBuffer().order(ByteOrder.LITTLE_ENDIAN).asFloatBuffer()
-      else -> throw UnsupportedOperationException("Conversion to " + ggmlType)
+      else -> throw UnsupportedOperationException("Conversion to $ggmlType")
     }
   }
 }

@@ -1,13 +1,12 @@
 package com.llama4j.gguf
 
 import com.llama4j.floattensor.FloatTensor
+import com.llama4j.util.Timer
 import java.io.IOException
 import java.lang.foreign.Arena
 import java.nio.channels.FileChannel
 import java.nio.charset.StandardCharsets
 import java.nio.file.Path
-import java.util.*
-import java.util.function.IntPredicate
 
 class GGUF {
   private var tensorCount = 0 // uint64_t
@@ -16,7 +15,7 @@ class GGUF {
       if (field != 0) {
         return field
       }
-      field = Objects.requireNonNull<MutableMap<String, Any>?>(metadata)
+      field = metadata!!
         .getOrDefault("general.alignment", DEFAULT_ALIGNMENT) as Int
       assert(Integer.bitCount(field) == 1) { "alignment must be a power of two" }
       return field
@@ -28,17 +27,17 @@ class GGUF {
     private set
 
   fun getMetadata(): MutableMap<String, Any> {
-    return Objects.requireNonNull<MutableMap<String, Any>?>(metadata)
+    return metadata!!
   }
 
   fun getTensorInfos(): MutableMap<String, GGUFTensorInfo> {
-    return Objects.requireNonNull<MutableMap<String, GGUFTensorInfo>?>(tensorInfos)
+    return tensorInfos!!
   }
 
   @Throws(IOException::class)
   private fun loadModelImpl(reader: ChannelReader) {
     readHeader(reader)
-    this.tensorInfos = HashMap.newHashMap<String, GGUFTensorInfo>(tensorCount)
+    this.tensorInfos = HashMap.newHashMap(tensorCount)
     for (i in 0..<tensorCount) {
       val ti = readTensorInfo(reader)
       assert(!tensorInfos!!.containsKey(ti.name))
@@ -53,7 +52,7 @@ class GGUF {
   @Throws(IOException::class)
   private fun readGGMLType(reader: ChannelReader): GGMLType {
     val ggmlTypeId = readInt(reader)
-    return GGMLType.Companion.fromId(ggmlTypeId)
+    return GGMLType.fromId(ggmlTypeId)
   }
 
   @Throws(IOException::class)
@@ -84,10 +83,10 @@ class GGUF {
     assert(key.length < (1 shl 16))
     assert(
       key.codePoints()
-        .allMatch(IntPredicate { cp: Int -> ('a'.code <= cp && cp <= 'z'.code) || ('0'.code <= cp && cp <= '9'.code) || cp == '_'.code || cp == '.'.code })
+        .allMatch { cp: Int -> ('a'.code <= cp && cp <= 'z'.code) || ('0'.code <= cp && cp <= '9'.code) || cp == '_'.code || cp == '.'.code }
     )
     val value = readMetadataValue(reader)
-    return Pair<String, Any>(key, value)
+    return Pair(key, value)
   }
 
   @Throws(IOException::class)
@@ -97,19 +96,19 @@ class GGUF {
   }
 
   @Throws(IOException::class)
-  fun readHeader(reader: ChannelReader) {
+  private fun readHeader(reader: ChannelReader) {
     val magic = readInt(reader)
-    require(magic == GGUF_MAGIC) { "unsupported header.magic " + magic }
+    require(magic == GGUF_MAGIC) { "unsupported header.magic $magic" }
     val version = readInt(reader)
-    require(SUPPORTED_GGUF_VERSIONS.contains(version)) { "unsupported header.version " + version }
+    require(SUPPORTED_GGUF_VERSIONS.contains(version)) { "unsupported header.version $version" }
     this.tensorCount = Math.toIntExact(readLong(reader))
     // uint64_t
-    val metadata_kv_count = Math.toIntExact(readLong(reader))
-    this.metadata = HashMap.newHashMap<String, Any>(metadata_kv_count)
-    for (i in 0..<metadata_kv_count) {
+    val metadataKvCount = Math.toIntExact(readLong(reader))
+    this.metadata = HashMap.newHashMap(metadataKvCount)
+    repeat((0..<metadataKvCount).count()) {
       val keyValue = readKeyValuePair(reader)
       assert(!metadata!!.containsKey(keyValue.first))
-      metadata!!.put(keyValue.first, keyValue.second)
+      metadata!![keyValue.first] = keyValue.second
     }
   }
 
@@ -117,60 +116,15 @@ class GGUF {
   private fun readArray(reader: ChannelReader): Any {
     val valueType = readMetadataValueType(reader)
     val len = Math.toIntExact(readLong(reader))
-    when (valueType) {
-      MetadataValueType.UINT8, MetadataValueType.INT8 -> {
-        return readBytes(reader, len)
-      }
-
-      MetadataValueType.UINT16, MetadataValueType.INT16 -> {
-        val shorts = ShortArray(len)
-        for (i in 0..<len) {
-          shorts[i] = readShort(reader)
-        }
-        return shorts
-      }
-
-      MetadataValueType.UINT32, MetadataValueType.INT32 -> {
-        val ints = IntArray(len)
-        for (i in 0..<len) {
-          ints[i] = readInt(reader)
-        }
-        return ints
-      }
-
-      MetadataValueType.FLOAT32 -> {
-        val floats = FloatArray(len)
-        for (i in 0..<len) {
-          floats[i] = readFloat(reader)
-        }
-        return floats
-      }
-
-      MetadataValueType.BOOL -> {
-        val booleans = BooleanArray(len)
-        for (i in 0..<len) {
-          booleans[i] = readBoolean(reader)
-        }
-        return booleans
-      }
-
-      MetadataValueType.STRING -> {
-        val strings: Array<String> = arrayOfNulls<String>(len)
-        for (i in 0..<len) {
-          strings[i] = readString(reader)
-        }
-        return strings
-      }
-
-      MetadataValueType.ARRAY -> {
-        val arrays: Array<Any> = arrayOfNulls<Any>(len)
-        for (i in 0..<len) {
-          arrays[i] = readArray(reader)
-        }
-        return arrays
-      }
-
-      else -> throw UnsupportedOperationException("read array of " + valueType)
+    return when (valueType) {
+      MetadataValueType.UINT8, MetadataValueType.INT8 -> readBytes(reader, len)
+      MetadataValueType.UINT16, MetadataValueType.INT16 -> ShortArray(len) { readShort(reader) }
+      MetadataValueType.UINT32, MetadataValueType.INT32 -> IntArray(len) { readInt(reader) }
+      MetadataValueType.FLOAT32 -> FloatArray(len) { readFloat(reader) }
+      MetadataValueType.BOOL -> BooleanArray(len) { readBoolean(reader) }
+      MetadataValueType.STRING -> Array(len) { readString(reader) }
+      MetadataValueType.ARRAY -> Array(len) { readArray(reader) }
+      else -> throw UnsupportedOperationException("read array of $valueType")
     }
   }
 
@@ -192,7 +146,7 @@ class GGUF {
   @Throws(IOException::class)
   private fun readMetadataValueType(reader: ChannelReader): MetadataValueType {
     val index = readInt(reader)
-    return MetadataValueType.Companion.fromIndex(index)
+    return MetadataValueType.fromIndex(index)
   }
 
   @Throws(IOException::class)
@@ -244,7 +198,7 @@ class GGUF {
     private const val GGUF_MAGIC = 0x46554747
     private const val DEFAULT_ALIGNMENT = 32 // must be a power of 2
     private val PARSE_BUFFER_SIZE = 1 shl 20
-    private val SUPPORTED_GGUF_VERSIONS = mutableListOf<Int>(2, 3)
+    private val SUPPORTED_GGUF_VERSIONS = mutableListOf(2, 3)
 
     @Throws(IOException::class)
     fun loadTensors(
@@ -256,10 +210,10 @@ class GGUF {
       val tensorData =
         fileChannel.map(FileChannel.MapMode.READ_ONLY, tensorDataOffset, fileChannel.size() - tensorDataOffset, arena)
       val tensorEntries: MutableMap<String, GGMLTensorEntry> =
-        HashMap.newHashMap<String, GGMLTensorEntry>(tensorInfos.size)
+        HashMap.newHashMap(tensorInfos.size)
       for (entry in tensorInfos.entries) {
         val ti = entry.value
-        val numberOfElements: Long = FloatTensor.Companion.numberOfElementsLong(*ti.dimensions)
+        val numberOfElements: Long = FloatTensor.numberOfElementsLong(*ti.dimensions)
         val sizeInBytes = ti.ggmlType.byteSizeFor(numberOfElements)
         val memorySegment = tensorData.asSlice(ti.offset, sizeInBytes)
         tensorEntries.put(ti.name, GGMLTensorEntry(tensorData, ti.name, ti.ggmlType, ti.dimensions, memorySegment))
@@ -276,7 +230,7 @@ class GGUF {
 
     @Throws(IOException::class)
     fun loadModel(fileChannel: FileChannel, modelLabel: String): GGUF {
-      log("Parse " + modelLabel).use { ignored ->
+      Timer.log("Parse $modelLabel").use {
         fileChannel.position(0L)
         val gguf = GGUF()
         val reader = ChannelReader(fileChannel, PARSE_BUFFER_SIZE)

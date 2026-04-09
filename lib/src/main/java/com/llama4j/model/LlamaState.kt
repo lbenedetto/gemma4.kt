@@ -2,7 +2,6 @@ package com.llama4j.model
 
 import com.llama4j.floattensor.ArrayFloatTensor
 import com.llama4j.floattensor.FloatTensor
-import java.util.function.IntUnaryOperator
 import java.util.stream.IntStream
 
 class LlamaState internal constructor(config: LlamaConfiguration) {
@@ -39,31 +38,31 @@ class LlamaState internal constructor(config: LlamaConfiguration) {
   init {
     val maxQueryDim = config.numberOfHeads * config.headSizeFull
     val maxKVDim =
-      IntStream.range(0, config.numberOfLayers).map(IntUnaryOperator { layer: Int -> config.kvDim(layer) }).max()
+      IntStream.range(0, config.numberOfLayers).map { layer: Int -> config.kvDim(layer) }.max()
         .orElse(0)
     val maxHiddenDim = config.maxHiddenDim()
-    this.x = ArrayFloatTensor.Companion.allocate(config.embeddingLength)
-    this.xb = ArrayFloatTensor.Companion.allocate(config.embeddingLength)
-    this.xb_k = ArrayFloatTensor.Companion.allocate(maxQueryDim)
-    this.xb2 = ArrayFloatTensor.Companion.allocate(config.embeddingLength)
-    this.hb = ArrayFloatTensor.Companion.allocate(maxHiddenDim)
-    this.hb2 = ArrayFloatTensor.Companion.allocate(maxHiddenDim)
-    this.q = ArrayFloatTensor.Companion.allocate(maxQueryDim)
-    this.k = ArrayFloatTensor.Companion.allocate(maxKVDim)
-    this.v = ArrayFloatTensor.Companion.allocate(maxKVDim)
-    this.att = ArrayFloatTensor.Companion.allocate(config.numberOfHeads, config.contextLength)
-    this.logits = ArrayFloatTensor.Companion.allocate(config.vocabularySize)
+    this.x = ArrayFloatTensor.allocate(config.embeddingLength)
+    this.xb = ArrayFloatTensor.allocate(config.embeddingLength)
+    this.xb_k = ArrayFloatTensor.allocate(maxQueryDim)
+    this.xb2 = ArrayFloatTensor.allocate(config.embeddingLength)
+    this.hb = ArrayFloatTensor.allocate(maxHiddenDim)
+    this.hb2 = ArrayFloatTensor.allocate(maxHiddenDim)
+    this.q = ArrayFloatTensor.allocate(maxQueryDim)
+    this.k = ArrayFloatTensor.allocate(maxKVDim)
+    this.v = ArrayFloatTensor.allocate(maxKVDim)
+    this.att = ArrayFloatTensor.allocate(config.numberOfHeads, config.contextLength)
+    this.logits = ArrayFloatTensor.allocate(config.vocabularySize)
     val plDim = config.embeddingLengthPerLayer
-    this.perLayerInputs = if (plDim > 0) ArrayFloatTensor.Companion.allocate(plDim * config.numberOfLayers) else null
-    this.plGate = if (plDim > 0) ArrayFloatTensor.Companion.allocate(plDim) else null
-    this.plProj = if (plDim > 0) ArrayFloatTensor.Companion.allocate(config.embeddingLength) else null
+    this.perLayerInputs = if (plDim > 0) ArrayFloatTensor.allocate(plDim * config.numberOfLayers) else null
+    this.plGate = if (plDim > 0) ArrayFloatTensor.allocate(plDim) else null
+    this.plProj = if (plDim > 0) ArrayFloatTensor.allocate(config.embeddingLength) else null
     // MoE buffers
-    if (config.isMoE()) {
-      this.routerLogits = ArrayFloatTensor.Companion.allocate(config.expertCount)
-      this.moeInput = ArrayFloatTensor.Companion.allocate(config.embeddingLength)
-      this.moeOutput = ArrayFloatTensor.Companion.allocate(config.embeddingLength)
-      this.expertGateUp = ArrayFloatTensor.Companion.allocate(2 * config.expertFeedForwardLength)
-      this.expertDown = ArrayFloatTensor.Companion.allocate(config.embeddingLength)
+    if (config.isMoE) {
+      this.routerLogits = ArrayFloatTensor.allocate(config.expertCount)
+      this.moeInput = ArrayFloatTensor.allocate(config.embeddingLength)
+      this.moeOutput = ArrayFloatTensor.allocate(config.embeddingLength)
+      this.expertGateUp = ArrayFloatTensor.allocate(2 * config.expertFeedForwardLength)
+      this.expertDown = ArrayFloatTensor.allocate(config.embeddingLength)
     } else {
       this.routerLogits = null
       this.moeInput = null
@@ -72,12 +71,8 @@ class LlamaState internal constructor(config: LlamaConfiguration) {
       this.expertDown = null
     }
     // Only allocate KV caches for layers that have their own KV (not shared)
-    this.keyCache = arrayOfNulls<FloatTensor>(config.nLayerKvFromStart)
-    this.valueCache = arrayOfNulls<FloatTensor>(config.nLayerKvFromStart)
-    for (l in 0..<config.nLayerKvFromStart) {
-      val kvDim = config.kvDim(l)
-      keyCache[l] = ArrayFloatTensor.Companion.allocate(config.contextLength, kvDim)
-      valueCache[l] = ArrayFloatTensor.Companion.allocate(config.contextLength, kvDim)
-    }
+    val kvDims = IntArray(config.nLayerKvFromStart) { config.kvDim(it) }
+    this.keyCache = Array(config.nLayerKvFromStart) { ArrayFloatTensor.allocate(config.contextLength, kvDims[it]) }
+    this.valueCache = Array(config.nLayerKvFromStart) { ArrayFloatTensor.allocate(config.contextLength, kvDims[it]) }
   }
 }

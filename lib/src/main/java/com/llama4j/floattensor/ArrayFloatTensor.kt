@@ -35,7 +35,7 @@ class ArrayFloatTensor : FloatTensor {
     values[index] = value
   }
 
-  public override fun type(): GGMLType {
+  override fun type(): GGMLType {
     return GGMLType.F32
   }
 
@@ -44,26 +44,26 @@ class ArrayFloatTensor : FloatTensor {
     return this
   }
 
-  public override fun getFloatVector(species: VectorSpecies<Float>, index: Int): FloatVector {
-    if (!FloatTensor.Companion.USE_VECTOR_API) {
+  override fun getFloatVector(species: VectorSpecies<Float>, offset: Int): FloatVector {
+    if (!USE_VECTOR_API) {
       throw UnsupportedOperationException()
     }
-    return FloatVector.fromArray(species, values, index)
+    return FloatVector.fromArray(species, values, offset)
   }
 
   override fun dot(thisOffset: Int, that: FloatTensor, thatOffset: Int, size: Int): Float {
     if (that is ArrayFloatTensor) {
-      if (FloatTensor.Companion.USE_VECTOR_API) {
+      if (USE_VECTOR_API) {
         return vectorDot(this, thisOffset, that, thatOffset, size)
       }
-      return FloatTensor.Companion.scalarDot(this, thisOffset, that, thatOffset, size)
+      return scalarDot(this, thisOffset, that, thatOffset, size)
     }
     return that.dot(thatOffset, this, thisOffset, size)
   }
 
   companion object {
     fun allocate(vararg dims: Int): FloatTensor {
-      val numberOfElements: Int = FloatTensor.Companion.numberOfElements(*dims)
+      val numberOfElements: Int = numberOfElements(*dims)
       return ArrayFloatTensor(FloatArray(numberOfElements))
     }
 
@@ -74,18 +74,18 @@ class ArrayFloatTensor : FloatTensor {
       thatOffset: Int,
       size: Int
     ): Float {
-      var `val` = FloatVector.zero(Objects.requireNonNull<VectorSpecies<Float>?>(FloatTensor.Companion.F_SPECIES))
-      val upperBound: Int = FloatTensor.Companion.F_SPECIES.loopBound(size)
+      var value = FloatVector.zero(F_SPECIES!!)
+      val upperBound: Int = F_SPECIES.loopBound(size)
       run {
         var i = 0
         while (i < upperBound) {
-          val a = FloatVector.fromArray(FloatTensor.Companion.F_SPECIES, thiz.values, thisOffset + i)
-          val b = FloatVector.fromArray(FloatTensor.Companion.F_SPECIES, that.values, thatOffset + i)
-          `val` = a.fma(b, `val`)
-          i += FloatTensor.Companion.F_SPECIES.length()
+          val a = FloatVector.fromArray(F_SPECIES, thiz.values, thisOffset + i)
+          val b = FloatVector.fromArray(F_SPECIES, that.values, thatOffset + i)
+          value = a.fma(b, value)
+          i += F_SPECIES.length()
         }
       }
-      var result = `val`.reduceLanes(VectorOperators.ADD)
+      var result = value.reduceLanes(VectorOperators.ADD)
       for (i in upperBound..<size) {
         result += thiz.values[thisOffset + i] * that.values[thatOffset + i]
       }

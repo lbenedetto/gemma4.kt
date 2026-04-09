@@ -8,9 +8,6 @@ import jdk.incubator.vector.VectorSpecies
 import java.lang.foreign.MemorySegment
 import java.lang.foreign.ValueLayout
 import java.util.*
-import java.util.function.IntBinaryOperator
-import java.util.function.IntConsumer
-import java.util.function.IntPredicate
 import kotlin.math.exp
 
 abstract class FloatTensor {
@@ -29,12 +26,12 @@ abstract class FloatTensor {
   }
 
   fun matmul(that: FloatTensor, out: FloatTensor, dim0: Int, dim1: Int) {
-    Parallel.parallelFor(0, dim0, IntConsumer { i: Int -> out.setFloat(i, dot(i * dim1, that, 0, dim1)) })
+    Parallel.parallelFor(0, dim0) { i: Int -> out.setFloat(i, dot(i * dim1, that, 0, dim1)) }
   }
 
   // matmul with offset into this tensor (for expert weight slicing in 3D tensors)
   fun matmul(that: FloatTensor, out: FloatTensor, dim0: Int, dim1: Int, thisOffset: Int) {
-    Parallel.parallelFor(0, dim0, IntConsumer { i: Int -> out.setFloat(i, dot(thisOffset + i * dim1, that, 0, dim1)) })
+    Parallel.parallelFor(0, dim0) { i: Int -> out.setFloat(i, dot(thisOffset + i * dim1, that, 0, dim1)) }
   }
 
   fun reduce(thisOffset: Int, size: Int, seed: Float, reduce: (Float, Float) -> Float): Float {
@@ -50,18 +47,14 @@ abstract class FloatTensor {
   }
 
   fun max(thisOffset: Int, size: Int): Float {
-    return reduce(
-      thisOffset,
-      size,
-      Float.NEGATIVE_INFINITY
-    ) { a: Float, b: Float -> Math.max(a, b) }
+    return reduce(thisOffset, size, Float.NEGATIVE_INFINITY, Math::max)
   }
 
   fun copyTo(thisOffset: Int, that: FloatTensor, thatOffset: Int, size: Int) {
     that.mapWithIndexInPlace(
       thatOffset,
-      size,
-      MapWithIndexFunction { value: Float, index: Int -> this.getFloat((index - thatOffset + thisOffset).toLong()) })
+      size
+    ) { value: Float, index: Int -> this.getFloat((index - thatOffset + thisOffset).toLong()) }
   }
 
   fun argmax(thisOffset: Int, size: Int): Int {
@@ -106,8 +99,8 @@ abstract class FloatTensor {
   fun addInPlace(thisOffset: Int, that: FloatTensor, thatOffset: Int, size: Int): FloatTensor {
     return mapWithIndexInPlace(
       thisOffset,
-      size,
-      MapWithIndexFunction { value: Float, index: Int -> value + that.getFloat((index - thisOffset + thatOffset).toLong()) })
+      size
+    ) { value: Float, index: Int -> value + that.getFloat((index - thisOffset + thatOffset).toLong()) }
   }
 
   fun addInPlace(that: FloatTensor): FloatTensor {
@@ -117,21 +110,21 @@ abstract class FloatTensor {
   fun multiplyInPlace(thisOffset: Int, that: FloatTensor, thatOffset: Int, size: Int): FloatTensor {
     return mapWithIndexInPlace(
       thisOffset,
-      size,
-      MapWithIndexFunction { value: Float, index: Int -> value * that.getFloat((index - thisOffset + thatOffset).toLong()) })
+      size
+    ) { value: Float, index: Int -> value * that.getFloat((index - thisOffset + thatOffset).toLong()) }
   }
 
   fun divideInPlace(thisOffset: Int, size: Int, value: Float): FloatTensor {
-    return mapInPlace(thisOffset, size, MapFunction { f: Float -> f / value })
+    return mapInPlace(thisOffset, size) { f: Float -> f / value }
   }
 
   open fun fillInPlace(thisOffset: Int, size: Int, value: Float): FloatTensor {
-    return mapInPlace(thisOffset, size, MapFunction { `_`: Float -> value })
+    return mapInPlace(thisOffset, size) { `_`: Float -> value }
   }
 
   fun softmaxInPlace(thisOffset: Int, size: Int): FloatTensor {
     val maxVal = max(thisOffset, size)
-    mapInPlace(thisOffset, size, MapFunction { f: Float -> exp((f - maxVal).toDouble()).toFloat() })
+    mapInPlace(thisOffset, size) { f: Float -> exp((f - maxVal).toDouble()).toFloat() }
     val sum = sum(thisOffset, size)
     return divideInPlace(thisOffset, size, sum)
   }
@@ -154,10 +147,10 @@ abstract class FloatTensor {
     init {
       if (USE_VECTOR_API) {
         F_SPECIES =
-          VectorShape.forBitSize(VECTOR_BIT_SIZE).withLanes<Float>(Float::class.javaPrimitiveType)
-        I_SPECIES = F_SPECIES.withLanes<Int>(Int::class.javaPrimitiveType)
+          VectorShape.forBitSize(VECTOR_BIT_SIZE).withLanes(Float::class.javaPrimitiveType)
+        I_SPECIES = F_SPECIES.withLanes(Int::class.javaPrimitiveType)
         S_SPECIES_HALF =
-          VectorShape.forBitSize(F_SPECIES.vectorBitSize() / 2).withLanes<Short>(Short::class.javaPrimitiveType)
+          VectorShape.forBitSize(F_SPECIES.vectorBitSize() / 2).withLanes(Short::class.javaPrimitiveType)
         assert(F_SPECIES.length() == S_SPECIES_HALF.length())
       } else {
         F_SPECIES = null
@@ -166,12 +159,16 @@ abstract class FloatTensor {
       }
     }
 
+    fun Byte.toUnsignedInt(): Int = toInt() and 0xFF
+
+    fun Short.toUnsignedInt(): Int = toInt() and 0xFFFF
+
     fun readShort(memorySegment: MemorySegment, offset: Long): Short {
       return memorySegment.get(ValueLayout.JAVA_SHORT_UNALIGNED, offset)
     }
 
     fun readFloat16(memorySegment: MemorySegment, offset: Long): Float {
-      return Float.float16ToFloat(readShort(memorySegment, offset))
+      return Float.fromBits(readShort(memorySegment, offset).toInt() shl 16)
     }
 
     fun readByte(memorySegment: MemorySegment, offset: Long): Byte {
@@ -183,8 +180,8 @@ abstract class FloatTensor {
     }
 
     fun numberOfElements(vararg dimensions: Int): Int {
-      assert(Arrays.stream(dimensions).allMatch(IntPredicate { i: Int -> i > 0 }))
-      return Arrays.stream(dimensions).reduce(IntBinaryOperator { x: Int, y: Int -> Math.multiplyExact(x, y) })
+      assert(Arrays.stream(dimensions).allMatch { it > 0 })
+      return Arrays.stream(dimensions).reduce(Math::multiplyExact)
         .orElseThrow()
     }
 

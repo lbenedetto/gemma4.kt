@@ -1,26 +1,23 @@
 package com.llama4j.model
 
 import com.llama4j.tokenizer.GemmaTokenizer
-import java.util.*
 
-class GemmaChatFormat(tokenizer: GemmaTokenizer) {
-  protected val tokenizer: GemmaTokenizer
-  protected val beginOfSentence: Int
-  protected val startOfTurn: Int
-  protected val endOfTurn: Int
-  protected val endOfSentence: Int
-  protected val fimSuffix: Int
-  protected val fimPrefix: Int
-  protected val fimMiddle: Int
-  protected val fileSeparator: Int
+class GemmaChatFormat(private val tokenizer: GemmaTokenizer) {
+  private val beginOfSentence: Int
+  private val startOfTurn: Int
+  private val endOfTurn: Int
+  private val endOfSentence: Int
+  private val fimSuffix: Int
+  private val fimPrefix: Int
+  private val fimMiddle: Int
+  private val fileSeparator: Int
 
   init {
-    this.tokenizer = tokenizer
-    val specialTokens: MutableMap<String, Int> = this.tokenizer.specialTokens
-    this.beginOfSentence = Objects.requireNonNull<Int>(specialTokens.get("<bos>"))
-    this.startOfTurn = Objects.requireNonNull<Int>(specialTokens.get("<|turn>"))
-    this.endOfTurn = Objects.requireNonNull<Int>(specialTokens.get("<turn|>"))
-    this.endOfSentence = Objects.requireNonNull<Int>(specialTokens.get("<eos>"))
+    val specialTokens: Map<String, Int> = this.tokenizer.specialTokens
+    this.beginOfSentence = specialTokens["<bos>"]!!
+    this.startOfTurn = specialTokens["<|turn>"]!!
+    this.endOfTurn = specialTokens["<turn|>"]!!
+    this.endOfSentence = specialTokens["<eos>"]!!
 
     this.fimSuffix = specialTokens.getOrDefault("<|fim_suffix|>", -1)
     this.fimPrefix = specialTokens.getOrDefault("<|fim_prefix|>", -1)
@@ -67,7 +64,7 @@ class GemmaChatFormat(tokenizer: GemmaTokenizer) {
   fun encodeSystemThinkingTurn(systemPrompt: String?): MutableList<Int> {
     // Matches Gemma4 template with enable_thinking=true:
     // <|turn>system\n<|think|>[system_content]<turn|>\n
-    val tokens: MutableList<Int> = ArrayList<Int>(encodeHeader(Message(Role.Companion.SYSTEM, "")))
+    val tokens: MutableList<Int> = ArrayList<Int>(encodeHeader(Message(Role.SYSTEM, "")))
     val thinkToken = tokenizer.specialTokens.get("<|think|>")
     if (thinkToken != null) {
       tokens.add(thinkToken)

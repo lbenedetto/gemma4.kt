@@ -32,7 +32,7 @@ class LlamaWeights(
   perLayerInpGate: Array<FloatTensor>?,
   perLayerProj: Array<FloatTensor>?,
   perLayerPostNorm: Array<FloatBuffer>?,
-  ffnGateInp: Array<FloatTensor?>?,
+  ffnGateInp: Array<FloatTensor>?,
   ffnGateInpScale: Array<FloatBuffer>?,
   ffnGateUpExps: Array<FloatTensor>?,
   ffnDownExps: Array<FloatTensor>?,
@@ -74,7 +74,7 @@ class LlamaWeights(
   val perLayerPostNorm: Array<FloatBuffer>?
 
   // MoE weights (null if dense model)
-  val ffnGateInp: Array<FloatTensor?>? // router weight (layer, n_experts, n_embd)
+  val ffnGateInp: Array<FloatTensor>? // router weight (layer, n_experts, n_embd)
   val ffnGateInpScale: Array<FloatBuffer>? // router input scale (layer, n_embd)
   val ffnGateUpExps: Array<FloatTensor>? // fused gate+up expert (layer, n_experts * 2*expert_ff, n_embd)
   val ffnDownExps: Array<FloatTensor>? // down expert (layer, n_experts * n_embd, expert_ff)
@@ -84,7 +84,6 @@ class LlamaWeights(
   val ffnPostNorm2: Array<FloatBuffer>? // MoE post norm (layer, dim)
 
   init {
-    this.rms_att_weight = rms_att_weight
     this.wq = wq
     this.wk = wk
     this.wv = wv

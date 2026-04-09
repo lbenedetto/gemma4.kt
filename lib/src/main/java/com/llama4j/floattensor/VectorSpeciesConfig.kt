@@ -5,10 +5,10 @@ import jdk.incubator.vector.VectorSpecies
 
 internal class VectorSpeciesConfig private constructor() {
   val FLOAT: VectorSpecies<Float> =
-    VectorShape.forBitSize(VECTOR_BIT_SIZE).withLanes<Float>(Float::class.javaPrimitiveType)
-  val INT: VectorSpecies<Int> = FLOAT.withLanes<Int>(Int::class.javaPrimitiveType)
+    VectorShape.forBitSize(VECTOR_BIT_SIZE).withLanes(Float::class.javaPrimitiveType)
+  val INT: VectorSpecies<Int> = FLOAT.withLanes(Int::class.javaPrimitiveType)
   val SHORT_HALF: VectorSpecies<Short> =
-    VectorShape.forBitSize(FLOAT.vectorBitSize() / 2).withLanes<Short>(Short::class.javaPrimitiveType)
+    VectorShape.forBitSize(FLOAT.vectorBitSize() / 2).withLanes(Short::class.javaPrimitiveType)
 
   companion object {
     val VECTOR_BIT_SIZE: Int = Integer.getInteger("llama.VectorBitSize", VectorShape.preferredShape().vectorBitSize())

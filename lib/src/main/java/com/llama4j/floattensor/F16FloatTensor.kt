@@ -7,7 +7,6 @@ import jdk.incubator.vector.VectorOperators
 import jdk.incubator.vector.VectorSpecies
 import java.lang.foreign.MemorySegment
 import java.nio.ByteOrder
-import java.util.*
 
 internal class F16FloatTensor(size: Long, memorySegment: MemorySegment) : FloatTensor() {
   val size: Long
@@ -26,24 +25,24 @@ internal class F16FloatTensor(size: Long, memorySegment: MemorySegment) : FloatT
     throw UnsupportedOperationException("setFloat")
   }
 
-  override fun getFloatVector(species: VectorSpecies<Float>, index: Int): FloatVector? {
+  override fun getFloatVector(species: VectorSpecies<Float>, offset: Int): FloatVector? {
     throw UnsupportedOperationException("getFloatVector")
   }
 
-  public override fun type(): GGMLType {
+  override fun type(): GGMLType {
     return GGMLType.F16
   }
 
   override fun getFloat(index: Long): Float {
-    assert(0 <= index && index < size)
-    return FloatTensor.Companion.readFloat16(memorySegment, index * 2)
+    assert(index in 0..<size)
+    return readFloat16(memorySegment, index * 2)
   }
 
   override fun dot(thisOffset: Int, that: FloatTensor, thatOffset: Int, size: Int): Float {
-    if (FloatTensor.Companion.USE_VECTOR_API) {
+    if (USE_VECTOR_API) {
       return vectorDot(this, thisOffset, that as ArrayFloatTensor, thatOffset, size)
     } else {
-      return FloatTensor.Companion.scalarDot(this, thisOffset, that, thatOffset, size)
+      return scalarDot(this, thisOffset, that, thatOffset, size)
     }
   }
 
@@ -56,33 +55,33 @@ internal class F16FloatTensor(size: Long, memorySegment: MemorySegment) : FloatT
       size: Int
     ): Float {
       assert(
-        Objects.requireNonNull<VectorSpecies<Short>?>(FloatTensor.Companion.S_SPECIES_HALF)
-          .length() == Objects.requireNonNull<VectorSpecies<Float>?>(FloatTensor.Companion.F_SPECIES).length()
+        S_SPECIES_HALF!!
+          .length() == F_SPECIES!!.length()
       )
-      var `val` = FloatVector.zero(Objects.requireNonNull<VectorSpecies<Float>?>(FloatTensor.Companion.F_SPECIES))
-      val upperBound: Int = FloatTensor.Companion.F_SPECIES.loopBound(size)
+      var value = FloatVector.zero(F_SPECIES)
+      val upperBound: Int = F_SPECIES.loopBound(size)
       var i = 0
       while (i < upperBound) {
-        val thatVector = that.getFloatVector(FloatTensor.Companion.F_SPECIES, thatOffset + i)
+        val thatVector = that.getFloatVector(F_SPECIES, thatOffset + i)
         val bits16 = ShortVector.fromMemorySegment(
-          FloatTensor.Companion.S_SPECIES_HALF,
+          S_SPECIES_HALF,
           thiz.memorySegment,
           (thisOffset + i) * 2L,
           ByteOrder.LITTLE_ENDIAN
         )
         var bits32 =
-          bits16.castShape<Int>(Objects.requireNonNull<VectorSpecies<Int>?>(FloatTensor.Companion.I_SPECIES), 0)
+          bits16.castShape(I_SPECIES!!, 0)
             .reinterpretAsInts()
         val zeroExponentMask = bits32.and(0x7C00).neg().lanewise(VectorOperators.ASHR, 31)
         bits32 = bits32.and(0x8000).lanewise(VectorOperators.LSHL, 16)
           .or(bits32.and(0x7FFF).add(0x1C000).lanewise(VectorOperators.LSHL, 13).and(zeroExponentMask))
         val thizVector = bits32.reinterpretAsFloats()
-        `val` = thizVector.fma(thatVector, `val`)
-        i += FloatTensor.Companion.F_SPECIES.length()
+        value = thizVector.fma(thatVector, value)
+        i += F_SPECIES.length()
       }
-      var result = `val`.reduceLanes(VectorOperators.ADD)
+      var result = value.reduceLanes(VectorOperators.ADD)
       if (upperBound < size) {
-        result += FloatTensor.Companion.scalarDot(
+        result += scalarDot(
           thiz,
           thisOffset + upperBound,
           that,

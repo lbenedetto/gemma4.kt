@@ -23,7 +23,7 @@ object RoPE {
       }
     }
     assert(contextLength * halfHead == n)
-    return Pair<FloatArray, FloatArray>(cr, ci)
+    return Pair(cr, ci)
   }
 
   fun precomputeFreqsCisFromFreqs(
@@ -49,6 +49,6 @@ object RoPE {
       }
     }
     assert(contextLength * halfHead == n)
-    return Pair<FloatArray, FloatArray>(cr, ci)
+    return Pair(cr, ci)
   }
 }

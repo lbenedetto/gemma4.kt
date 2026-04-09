@@ -1,26 +1,16 @@
 package com.llama4j.gguf
 
 import java.io.IOException
-import java.lang.Byte
-import java.lang.Double
-import java.lang.Float
-import java.lang.Long
-import java.lang.Short
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.channels.ReadableByteChannel
-import kotlin.ByteArray
-import kotlin.Int
-import kotlin.Throws
 import kotlin.math.min
-import kotlin.require
 
 internal class ChannelReader(private val channel: ReadableByteChannel, bufferSize: Int) {
-  private val buffer: ByteBuffer
+  private val buffer: ByteBuffer = ByteBuffer.allocateDirect(bufferSize).order(ByteOrder.LITTLE_ENDIAN)
   private var position: Long
 
   init {
-    this.buffer = ByteBuffer.allocateDirect(bufferSize).order(ByteOrder.LITTLE_ENDIAN)
     this.buffer.limit(0)
     this.position = 0L
   }
@@ -47,15 +37,15 @@ internal class ChannelReader(private val channel: ReadableByteChannel, bufferSiz
 
   @Throws(IOException::class)
   fun readByte(): Byte {
-    ensure(Byte.BYTES)
-    position += Byte.BYTES.toLong()
+    ensure(Byte.SIZE_BYTES)
+    position += Byte.SIZE_BYTES.toLong()
     return buffer.get()
   }
 
   @Throws(IOException::class)
   fun readShort(): Short {
-    ensure(Short.BYTES)
-    position += Short.BYTES.toLong()
+    ensure(Short.SIZE_BYTES)
+    position += Short.SIZE_BYTES.toLong()
     return buffer.getShort()
   }
 
@@ -68,19 +58,19 @@ internal class ChannelReader(private val channel: ReadableByteChannel, bufferSiz
 
   @Throws(IOException::class)
   fun readLong(): Long {
-    ensure(Long.BYTES)
-    position += Long.BYTES.toLong()
+    ensure(Long.SIZE_BYTES)
+    position += Long.SIZE_BYTES.toLong()
     return buffer.getLong()
   }
 
   @Throws(IOException::class)
   fun readFloat(): Float {
-    return Float.intBitsToFloat(readInt())
+    return Float.fromBits(readInt())
   }
 
   @Throws(IOException::class)
   fun readDouble(): Double {
-    return Double.longBitsToDouble(readLong())
+    return Double.fromBits(readLong())
   }
 
   @Throws(IOException::class)

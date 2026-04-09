@@ -1,26 +1,14 @@
 package com.llama4j.floattensor
 
 import com.llama4j.gguf.GGMLType
+import com.llama4j.gguf.QK_K
 import jdk.incubator.vector.ByteVector
 import jdk.incubator.vector.FloatVector
 import jdk.incubator.vector.VectorOperators
 import jdk.incubator.vector.VectorSpecies
-import java.lang.Byte
-import java.lang.Float
-import java.lang.Short
 import java.lang.foreign.MemorySegment
 import java.nio.ByteOrder
-import java.util.*
-import kotlin.IllegalStateException
-import kotlin.Int
-import kotlin.Long
-import kotlin.UnsupportedOperationException
-import kotlin.and
-import kotlin.assert
 import kotlin.math.min
-import kotlin.or
-import kotlin.times
-import kotlin.toString
 
 internal class Q6_KFloatTensor(size: Long, memorySegment: MemorySegment) : FloatTensor() {
   val size: Long
@@ -39,11 +27,11 @@ internal class Q6_KFloatTensor(size: Long, memorySegment: MemorySegment) : Float
     throw UnsupportedOperationException("setFloat")
   }
 
-  override fun getFloatVector(species: VectorSpecies<Float>, index: Int): FloatVector? {
+  override fun getFloatVector(species: VectorSpecies<Float>, offset: Int): FloatVector? {
     throw UnsupportedOperationException("getFloatVector")
   }
 
-  public override fun type(): GGMLType {
+  override fun type(): GGMLType {
     return GGMLType.Q6_K
   }
 
@@ -56,7 +44,7 @@ internal class Q6_KFloatTensor(size: Long, memorySegment: MemorySegment) : Float
     val qlOff = blockOffset
     val qhOff = blockOffset + 128
     val scOff = blockOffset + 192
-    val d: Float = FloatTensor.Companion.readFloat16(memorySegment, blockOffset + 208)
+    val d: Float = readFloat16(memorySegment, blockOffset + 208)
 
     val half = withinBlock / 128
     val rem128 = withinBlock % 128
@@ -70,56 +58,56 @@ internal class Q6_KFloatTensor(size: Long, memorySegment: MemorySegment) : Float
     val qhShift: Int
     when (sub32) {
       0 -> {
-        qlNibble = Byte.toUnsignedInt(FloatTensor.Companion.readByte(memorySegment, qlBase + l)) and 0xF
+        qlNibble = readByte(memorySegment, qlBase + l).toUnsignedInt() and 0xF
         qhShift = 0
       }
 
       1 -> {
-        qlNibble = Byte.toUnsignedInt(FloatTensor.Companion.readByte(memorySegment, qlBase + 32 + l)) and 0xF
+        qlNibble = readByte(memorySegment, qlBase + 32 + l).toUnsignedInt() and 0xF
         qhShift = 2
       }
 
       2 -> {
-        qlNibble = (Byte.toUnsignedInt(FloatTensor.Companion.readByte(memorySegment, qlBase + l)) shr 4) and 0xF
+        qlNibble = (readByte(memorySegment, qlBase + l).toUnsignedInt() shr 4) and 0xF
         qhShift = 4
       }
 
       3 -> {
-        qlNibble = (Byte.toUnsignedInt(FloatTensor.Companion.readByte(memorySegment, qlBase + 32 + l)) shr 4) and 0xF
+        qlNibble = (readByte(memorySegment, qlBase + 32 + l).toUnsignedInt() shr 4) and 0xF
         qhShift = 6
       }
 
       else -> throw IllegalStateException()
     }
 
-    val qhBits = (Byte.toUnsignedInt(FloatTensor.Companion.readByte(memorySegment, qhBase + l)) shr qhShift) and 3
+    val qhBits = (readByte(memorySegment, qhBase + l).toUnsignedInt() shr qhShift) and 3
     val q6 = (qlNibble or (qhBits shl 4)) - 32
-    val sc = FloatTensor.Companion.readByte(memorySegment, scOff + half * 8 + sub32 * 2 + l / 16).toInt() // signed int8
+    val sc = readByte(memorySegment, scOff + half * 8 + sub32 * 2 + l / 16).toInt() // signed int8
 
     return d * sc * q6
   }
 
   override fun dot(thisOffset: Int, that: FloatTensor, thatOffset: Int, size: Int): Float {
-    if (FloatTensor.Companion.USE_VECTOR_API) {
+    if (USE_VECTOR_API) {
       return vectorDot(this, thisOffset, that as ArrayFloatTensor, thatOffset, size)
     } else {
-      return FloatTensor.Companion.scalarDot(this, thisOffset, that, thatOffset, size)
+      return scalarDot(this, thisOffset, that, thatOffset, size)
     }
   }
 
   companion object {
-    val BLOCK_SIZE: Int = GGMLType.Companion.QK_K
-    val TYPE_SIZE: Int = GGMLType.Q6_K.getTypeSize()
+    const val BLOCK_SIZE: Int = QK_K
+    val TYPE_SIZE: Int = GGMLType.Q6_K.typeSize
 
     private fun fp16ToFloatNoIntrinsic(h: Short): Float {
-      val bits = Short.toUnsignedInt(h)
+      val bits = h.toUnsignedInt()
       val sign = (bits and 0x8000) shl 16
       val exp = (bits ushr 10) and 0x1F
       var mantissa = bits and 0x03FF
 
       if (exp == 0) {
         if (mantissa == 0) {
-          return Float.intBitsToFloat(sign)
+          return Float.fromBits(sign)
         }
         var e = 127 - 15 + 1
         while ((mantissa and 0x0400) == 0) {
@@ -127,12 +115,12 @@ internal class Q6_KFloatTensor(size: Long, memorySegment: MemorySegment) : Float
           e--
         }
         mantissa = mantissa and 0x03FF
-        return Float.intBitsToFloat(sign or (e shl 23) or (mantissa shl 13))
+        return Float.fromBits(sign or (e shl 23) or (mantissa shl 13))
       }
       if (exp == 0x1F) {
-        return Float.intBitsToFloat(sign or 0x7F800000 or (mantissa shl 13))
+        return Float.fromBits(sign or 0x7F800000 or (mantissa shl 13))
       }
-      return Float.intBitsToFloat(sign or ((exp + (127 - 15)) shl 23) or (mantissa shl 13))
+      return Float.fromBits(sign or ((exp + (127 - 15)) shl 23) or (mantissa shl 13))
     }
 
     private fun vectorDot(
@@ -141,18 +129,18 @@ internal class Q6_KFloatTensor(size: Long, memorySegment: MemorySegment) : Float
       that: ArrayFloatTensor,
       thatOffset: Int,
       size: Int
-    ): kotlin.Float {
+    ): Float {
       var result = 0f
       var j = 0
 
       assert(Integer.bitCount(BLOCK_SIZE) == 1) { "power of 2" }
       val alignmentBound = min(size, -thisOffset and (BLOCK_SIZE - 1))
       if (alignmentBound > 0) {
-        result += FloatTensor.Companion.scalarDot(thiz, thisOffset, that, thatOffset, alignmentBound)
+        result += scalarDot(thiz, thisOffset, that, thatOffset, alignmentBound)
         j += alignmentBound
       }
 
-      var acc = FloatVector.zero(Objects.requireNonNull<VectorSpecies<kotlin.Float>?>(FloatTensor.Companion.F_SPECIES))
+      var acc = FloatVector.zero(F_SPECIES!!)
       var blockOffset: Long = (thisOffset + j).toLong() / BLOCK_SIZE * TYPE_SIZE
       val upperBound: Int = j + (size - j) / BLOCK_SIZE * BLOCK_SIZE
 
@@ -165,8 +153,8 @@ internal class Q6_KFloatTensor(size: Long, memorySegment: MemorySegment) : Float
         // an illegal high XMM operand under heavy vector register pressure in Q6_K
         // vectorDot, causing a compile-time crash. Keep this software conversion
         // until the Graal backend bug is fixed.
-        val d: kotlin.Float =
-          fp16ToFloatNoIntrinsic(FloatTensor.Companion.readShort(thiz.memorySegment, blockOffset + 208))
+        val d: Float =
+          fp16ToFloatNoIntrinsic(readShort(thiz.memorySegment, blockOffset + 208))
 
         for (h in 0..1) {
           val qlBase = qlOff + h * 64
@@ -187,74 +175,79 @@ internal class Q6_KFloatTensor(size: Long, memorySegment: MemorySegment) : Float
               qhBase + c * 16L, ByteOrder.LITTLE_ENDIAN
             )
 
-            val q0: ByteVector =
-              qlA.and(0xF.toByte()).or(qhV.and(3.toByte()).lanewise(VectorOperators.LSHL, 4)).sub(32.toByte())
-            val q1: ByteVector = qlB.and(0xF.toByte())
-              .or(qhV.lanewise(VectorOperators.LSHR, 2).and(3.toByte()).lanewise(VectorOperators.LSHL, 4))
+            val q0: ByteVector = qlA
+              .and(0xF.toByte())
+              .or(qhV.and(3.toByte()).lanewise(VectorOperators.LSHL, 4L))
               .sub(32.toByte())
-            val q2: ByteVector = qlA.lanewise(VectorOperators.LSHR, 4)
-              .or(qhV.lanewise(VectorOperators.LSHR, 4).and(3.toByte()).lanewise(VectorOperators.LSHL, 4))
+            val q1: ByteVector = qlB
+              .and(0xF.toByte())
+              .or(qhV.lanewise(VectorOperators.LSHR, 2L).and(3.toByte()).lanewise(VectorOperators.LSHL, 4L))
               .sub(32.toByte())
-            val q3: ByteVector = qlB.lanewise(VectorOperators.LSHR, 4)
-              .or(qhV.lanewise(VectorOperators.LSHR, 6).and(3.toByte()).lanewise(VectorOperators.LSHL, 4))
+            val q2: ByteVector = qlA
+              .lanewise(VectorOperators.LSHR, 4L)
+              .or(qhV.lanewise(VectorOperators.LSHR, 4L).and(3.toByte()).lanewise(VectorOperators.LSHL, 4L))
+              .sub(32.toByte())
+            val q3: ByteVector = qlB
+              .lanewise(VectorOperators.LSHR, 4L)
+              .or(qhV.lanewise(VectorOperators.LSHR, 6L).and(3.toByte()).lanewise(VectorOperators.LSHL, 4L))
               .sub(32.toByte())
 
-            val ds0: kotlin.Float = d * FloatTensor.Companion.readByte(thiz.memorySegment, scOff + h * 8 + c)
-            val ds1: kotlin.Float = d * FloatTensor.Companion.readByte(thiz.memorySegment, scOff + h * 8 + 2 + c)
-            val ds2: kotlin.Float = d * FloatTensor.Companion.readByte(thiz.memorySegment, scOff + h * 8 + 4 + c)
-            val ds3: kotlin.Float = d * FloatTensor.Companion.readByte(thiz.memorySegment, scOff + h * 8 + 6 + c)
+            val ds0: Float = d * readByte(thiz.memorySegment, scOff + h * 8 + c)
+            val ds1: Float = d * readByte(thiz.memorySegment, scOff + h * 8 + 2 + c)
+            val ds2: Float = d * readByte(thiz.memorySegment, scOff + h * 8 + 4 + c)
+            val ds3: Float = d * readByte(thiz.memorySegment, scOff + h * 8 + 6 + c)
 
-            val ds0Vec = FloatVector.broadcast(FloatTensor.Companion.F_SPECIES, ds0)
-            val ds1Vec = FloatVector.broadcast(FloatTensor.Companion.F_SPECIES, ds1)
-            val ds2Vec = FloatVector.broadcast(FloatTensor.Companion.F_SPECIES, ds2)
-            val ds3Vec = FloatVector.broadcast(FloatTensor.Companion.F_SPECIES, ds3)
+            val ds0Vec = FloatVector.broadcast(F_SPECIES, ds0)
+            val ds1Vec = FloatVector.broadcast(F_SPECIES, ds1)
+            val ds2Vec = FloatVector.broadcast(F_SPECIES, ds2)
+            val ds3Vec = FloatVector.broadcast(F_SPECIES, ds3)
 
             val sg0Idx = base + c * 16
             val sg1Idx = base + 32 + c * 16
             val sg2Idx = base + 64 + c * 16
             val sg3Idx = base + 96 + c * 16
 
-            when (FloatTensor.Companion.F_SPECIES.vectorBitSize()) {
+            when (F_SPECIES.vectorBitSize()) {
               512 -> {
-                val q0f = q0.castShape<kotlin.Float>(FloatTensor.Companion.F_SPECIES, 0).reinterpretAsFloats()
-                val q1f = q1.castShape<kotlin.Float>(FloatTensor.Companion.F_SPECIES, 0).reinterpretAsFloats()
-                val q2f = q2.castShape<kotlin.Float>(FloatTensor.Companion.F_SPECIES, 0).reinterpretAsFloats()
-                val q3f = q3.castShape<kotlin.Float>(FloatTensor.Companion.F_SPECIES, 0).reinterpretAsFloats()
-                acc = q0f.mul(ds0Vec).fma(that.getFloatVector(FloatTensor.Companion.F_SPECIES, sg0Idx), acc)
-                acc = q1f.mul(ds1Vec).fma(that.getFloatVector(FloatTensor.Companion.F_SPECIES, sg1Idx), acc)
-                acc = q2f.mul(ds2Vec).fma(that.getFloatVector(FloatTensor.Companion.F_SPECIES, sg2Idx), acc)
-                acc = q3f.mul(ds3Vec).fma(that.getFloatVector(FloatTensor.Companion.F_SPECIES, sg3Idx), acc)
+                val q0f = q0.castShape(F_SPECIES, 0).reinterpretAsFloats()
+                val q1f = q1.castShape(F_SPECIES, 0).reinterpretAsFloats()
+                val q2f = q2.castShape(F_SPECIES, 0).reinterpretAsFloats()
+                val q3f = q3.castShape(F_SPECIES, 0).reinterpretAsFloats()
+                acc = q0f.mul(ds0Vec).fma(that.getFloatVector(F_SPECIES, sg0Idx), acc)
+                acc = q1f.mul(ds1Vec).fma(that.getFloatVector(F_SPECIES, sg1Idx), acc)
+                acc = q2f.mul(ds2Vec).fma(that.getFloatVector(F_SPECIES, sg2Idx), acc)
+                acc = q3f.mul(ds3Vec).fma(that.getFloatVector(F_SPECIES, sg3Idx), acc)
               }
 
               256 -> {
                 for (p in 0..1) {
-                  val off: Int = p * FloatTensor.Companion.F_SPECIES.length()
-                  val q0f = q0.castShape<kotlin.Float>(FloatTensor.Companion.F_SPECIES, p).reinterpretAsFloats()
-                  val q1f = q1.castShape<kotlin.Float>(FloatTensor.Companion.F_SPECIES, p).reinterpretAsFloats()
-                  val q2f = q2.castShape<kotlin.Float>(FloatTensor.Companion.F_SPECIES, p).reinterpretAsFloats()
-                  val q3f = q3.castShape<kotlin.Float>(FloatTensor.Companion.F_SPECIES, p).reinterpretAsFloats()
-                  acc = q0f.mul(ds0Vec).fma(that.getFloatVector(FloatTensor.Companion.F_SPECIES, sg0Idx + off), acc)
-                  acc = q1f.mul(ds1Vec).fma(that.getFloatVector(FloatTensor.Companion.F_SPECIES, sg1Idx + off), acc)
-                  acc = q2f.mul(ds2Vec).fma(that.getFloatVector(FloatTensor.Companion.F_SPECIES, sg2Idx + off), acc)
-                  acc = q3f.mul(ds3Vec).fma(that.getFloatVector(FloatTensor.Companion.F_SPECIES, sg3Idx + off), acc)
+                  val off: Int = p * F_SPECIES.length()
+                  val q0f = q0.castShape(F_SPECIES, p).reinterpretAsFloats()
+                  val q1f = q1.castShape(F_SPECIES, p).reinterpretAsFloats()
+                  val q2f = q2.castShape(F_SPECIES, p).reinterpretAsFloats()
+                  val q3f = q3.castShape(F_SPECIES, p).reinterpretAsFloats()
+                  acc = q0f.mul(ds0Vec).fma(that.getFloatVector(F_SPECIES, sg0Idx + off), acc)
+                  acc = q1f.mul(ds1Vec).fma(that.getFloatVector(F_SPECIES, sg1Idx + off), acc)
+                  acc = q2f.mul(ds2Vec).fma(that.getFloatVector(F_SPECIES, sg2Idx + off), acc)
+                  acc = q3f.mul(ds3Vec).fma(that.getFloatVector(F_SPECIES, sg3Idx + off), acc)
                 }
               }
 
               128 -> {
                 for (p in 0..3) {
-                  val off: Int = p * FloatTensor.Companion.F_SPECIES.length()
-                  val q0f = q0.castShape<kotlin.Float>(FloatTensor.Companion.F_SPECIES, p).reinterpretAsFloats()
-                  val q1f = q1.castShape<kotlin.Float>(FloatTensor.Companion.F_SPECIES, p).reinterpretAsFloats()
-                  val q2f = q2.castShape<kotlin.Float>(FloatTensor.Companion.F_SPECIES, p).reinterpretAsFloats()
-                  val q3f = q3.castShape<kotlin.Float>(FloatTensor.Companion.F_SPECIES, p).reinterpretAsFloats()
-                  acc = q0f.mul(ds0Vec).fma(that.getFloatVector(FloatTensor.Companion.F_SPECIES, sg0Idx + off), acc)
-                  acc = q1f.mul(ds1Vec).fma(that.getFloatVector(FloatTensor.Companion.F_SPECIES, sg1Idx + off), acc)
-                  acc = q2f.mul(ds2Vec).fma(that.getFloatVector(FloatTensor.Companion.F_SPECIES, sg2Idx + off), acc)
-                  acc = q3f.mul(ds3Vec).fma(that.getFloatVector(FloatTensor.Companion.F_SPECIES, sg3Idx + off), acc)
+                  val off: Int = p * F_SPECIES.length()
+                  val q0f = q0.castShape(F_SPECIES, p).reinterpretAsFloats()
+                  val q1f = q1.castShape(F_SPECIES, p).reinterpretAsFloats()
+                  val q2f = q2.castShape(F_SPECIES, p).reinterpretAsFloats()
+                  val q3f = q3.castShape(F_SPECIES, p).reinterpretAsFloats()
+                  acc = q0f.mul(ds0Vec).fma(that.getFloatVector(F_SPECIES, sg0Idx + off), acc)
+                  acc = q1f.mul(ds1Vec).fma(that.getFloatVector(F_SPECIES, sg1Idx + off), acc)
+                  acc = q2f.mul(ds2Vec).fma(that.getFloatVector(F_SPECIES, sg2Idx + off), acc)
+                  acc = q3f.mul(ds3Vec).fma(that.getFloatVector(F_SPECIES, sg3Idx + off), acc)
                 }
               }
 
-              else -> throw UnsupportedOperationException(FloatTensor.Companion.F_SPECIES.toString())
+              else -> throw UnsupportedOperationException(F_SPECIES.toString())
             }
           }
         }
@@ -265,7 +258,7 @@ internal class Q6_KFloatTensor(size: Long, memorySegment: MemorySegment) : Float
       result += acc.reduceLanes(VectorOperators.ADD)
 
       if (j < size) {
-        result += FloatTensor.Companion.scalarDot(thiz, thisOffset + j, that, thatOffset + j, size - j)
+        result += scalarDot(thiz, thisOffset + j, that, thatOffset + j, size - j)
       }
 
       return result

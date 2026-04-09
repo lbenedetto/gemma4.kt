@@ -27,21 +27,14 @@ import com.llama4j.tokenizer.GemmaTokenizer
 import java.io.IOException
 import java.io.PrintStream
 import java.util.*
-import java.util.List
 import java.util.function.IntConsumer
 import java.util.random.RandomGeneratorFactory
-import kotlin.collections.ArrayList
-import kotlin.collections.MutableList
-import kotlin.collections.contains
-import kotlin.ranges.contains
-import kotlin.text.contains
-import kotlin.text.equals
 
 object Gemma4 {
   fun selectSampler(vocabularySize: Int, temperature: Float, topp: Float, rngSeed: Long): Sampler {
     val sampler: Sampler
     if (temperature == 0.0f) {
-      sampler = Sampler.Companion.ARGMAX
+      sampler = Sampler.ARGMAX
     } else {
       val rng = RandomGeneratorFactory.getDefault().create(rngSeed)
       val innerSampler: Sampler?
@@ -66,7 +59,7 @@ object Gemma4 {
   private fun plainStreamingPrinter(tokenizer: GemmaTokenizer): IntConsumer {
     return IntConsumer { token: Int ->
       if (!tokenizer.isSpecialToken(token)) {
-        print(tokenizer.decode(List.of<Int>(token)))
+        print(tokenizer.decode(listOf(token)))
       }
     }
   }
@@ -95,7 +88,7 @@ object Gemma4 {
       "auto" -> {
         val noColor = System.getenv("NO_COLOR")
         if (noColor != null) {
-          false
+          return false
         }
         val term = System.getenv("TERM")
         !"dumb".equals(term, ignoreCase = true)
@@ -107,11 +100,11 @@ object Gemma4 {
 
   private fun streamingPrinter(tokenizer: GemmaTokenizer, options: Options): IntConsumer {
     if (!options.stream) {
-      return IntConsumer { token: Int -> }
+      return IntConsumer { }
     }
 
-    val channelOpen = tokenizer.specialTokens.get("<|channel>")
-    val channelClose = tokenizer.specialTokens.get("<channel|>")
+    val channelOpen = tokenizer.specialTokens["<|channel>"]
+    val channelClose = tokenizer.specialTokens["<channel|>"]
     if (channelOpen == null || channelClose == null) {
       return plainStreamingPrinter(tokenizer)
     }
@@ -139,7 +132,7 @@ object Gemma4 {
         return@IntConsumer
       }
       if (!tokenizer.isSpecialToken(token)) {
-        val text = tokenizer.decode(List.of<Int>(token))
+        val text = tokenizer.decode(listOf(token))
         if (inChannel[0]) {
           if (thinkEnabled) {
             thoughtOut.print(text)
@@ -162,7 +155,7 @@ object Gemma4 {
     if (channelOpen == null || channelClose == null || tokens.isEmpty()) {
       return tokens
     }
-    val out: MutableList<Int> = ArrayList<Int>(tokens.size)
+    val out: MutableList<Int> = ArrayList(tokens.size)
     var inChannel = false
     for (tok in tokens) {
       if (tok == channelOpen) {
@@ -183,11 +176,11 @@ object Gemma4 {
   fun runInteractive(model: Llama, sampler: Sampler, options: Options) {
     var state: LlamaState? = null
     val chatFormat = GemmaChatFormat(model.tokenizer)
-    val conversationTokens: MutableList<Int> = ArrayList<Int>()
+    val conversationTokens: MutableList<Int> = ArrayList()
     if (options.think) {
       conversationTokens.addAll(chatFormat.encodeSystemThinkingTurn(options.systemPrompt))
     } else if (options.systemPrompt != null) {
-      conversationTokens.addAll(chatFormat.encodeMessage(Message(Role.Companion.SYSTEM, options.systemPrompt!!)))
+      conversationTokens.addAll(chatFormat.encodeMessage(Message(Role.SYSTEM, options.systemPrompt)))
     }
     var startPosition = 0
     val `in` = Scanner(System.`in`)
@@ -210,12 +203,12 @@ object Gemma4 {
       if (state == null) {
         state = model.createNewState()
       }
-      conversationTokens.addAll(chatFormat.encodeMessage(Message(Role.Companion.USER, userText)))
-      conversationTokens.addAll(chatFormat.encodeHeader(Message(Role.Companion.MODEL, "")))
+      conversationTokens.addAll(chatFormat.encodeMessage(Message(Role.USER, userText)))
+      conversationTokens.addAll(chatFormat.encodeHeader(Message(Role.MODEL, "")))
 
-      val stopTokens = chatFormat.getStopTokens()
+      val stopTokens = chatFormat.stopTokens
       val printer = streamingPrinter(model.tokenizer, options)
-      val responseTokens: MutableList<Int> = Llama.Companion.generateTokens(
+      val responseTokens: MutableList<Int> = Llama.generateTokens(
         model,
         state,
         startPosition,
@@ -228,8 +221,8 @@ object Gemma4 {
         printer
       )
       var stopToken: Int? = null
-      if (!responseTokens.isEmpty() && stopTokens.contains(responseTokens.getLast())) {
-        stopToken = responseTokens.getLast()
+      if (!responseTokens.isEmpty() && stopTokens.contains(responseTokens.last())) {
+        stopToken = responseTokens.last()
         responseTokens.removeLast()
       }
       val visibleResponseTokens = visibleTokens(model.tokenizer, responseTokens, options.think)
@@ -250,26 +243,25 @@ object Gemma4 {
   }
 
   fun runInstructOnce(model: Llama, sampler: Sampler, options: Options) {
-    val prompt = Objects.requireNonNull<String?>(options.prompt)
     val state = model.createNewState()
     val chatFormat = GemmaChatFormat(model.tokenizer)
-    val promptTokens: MutableList<Int> = ArrayList<Int>()
+    val promptTokens: MutableList<Int> = ArrayList()
 
     if (options.suffix != null) {
-      promptTokens.addAll(chatFormat.encodeFillInTheMiddle(prompt!!, options.suffix!!))
+      promptTokens.addAll(chatFormat.encodeFillInTheMiddle(options.prompt!!, options.suffix))
     } else {
       if (options.think) {
         promptTokens.addAll(chatFormat.encodeSystemThinkingTurn(options.systemPrompt))
       } else if (options.systemPrompt != null) {
-        promptTokens.addAll(chatFormat.encodeMessage(Message(Role.Companion.SYSTEM, options.systemPrompt!!)))
+        promptTokens.addAll(chatFormat.encodeMessage(Message(Role.SYSTEM, options.systemPrompt)))
       }
-      promptTokens.addAll(chatFormat.encodeMessage(Message(Role.Companion.USER, prompt!!)))
-      promptTokens.addAll(chatFormat.encodeHeader(Message(Role.Companion.MODEL, "")))
+      promptTokens.addAll(chatFormat.encodeMessage(Message(Role.USER, options.prompt!!)))
+      promptTokens.addAll(chatFormat.encodeHeader(Message(Role.MODEL, "")))
     }
 
-    val stopTokens = chatFormat.getStopTokens()
+    val stopTokens = chatFormat.stopTokens
     val printer = streamingPrinter(model.tokenizer, options)
-    val responseTokens: MutableList<Int> = Llama.Companion.generateTokens(
+    val responseTokens: MutableList<Int> = Llama.generateTokens(
       model,
       state,
       0,
@@ -281,7 +273,7 @@ object Gemma4 {
       options.colors,
       printer
     )
-    if (!responseTokens.isEmpty() && stopTokens.contains(responseTokens.getLast())) {
+    if (!responseTokens.isEmpty() && stopTokens.contains(responseTokens.last())) {
       responseTokens.removeLast()
     }
     val visibleResponseTokens = visibleTokens(model.tokenizer, responseTokens, options.think)
@@ -294,7 +286,7 @@ object Gemma4 {
   @Throws(IOException::class)
   @JvmStatic
   fun main(args: Array<String>) {
-    val options: Options = Options.Companion.parseOptions(args)
+    val options: Options = Options.parseOptions(args)
     var model = AOT.tryUsePreLoaded(options.modelPath, options.maxTokens)
     if (model == null) {
       model = ModelLoader.loadModel(options.modelPath, options.maxTokens)

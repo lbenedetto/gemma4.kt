@@ -2,66 +2,34 @@ package com.llama4j
 
 import java.io.PrintStream
 import java.nio.file.Path
-import java.util.*
+import kotlin.system.exitProcess
 
 @JvmRecord
 data class Options(
-  modelPath: Path,
-  prompt: String?,
-  suffix: String?,
-  systemPrompt: String?,
-  interactive: Boolean,
-  temperature: Float,
-  topp: Float,
-  seed: Long,
-  maxTokens: Int,
-  stream: Boolean,
-  echo: Boolean,
-  think: Boolean,
-  thinkInline: Boolean,
-  colors: Boolean
-) {
-  val modelPath: Path
-  val prompt: String?
-  val suffix: String?
-  val systemPrompt: String?
-  val interactive: Boolean
-  val temperature: Float
-  val topp: Float
-  val seed: Long
-  val maxTokens: Int
-  val stream: Boolean
-  val echo: Boolean
-  val think: Boolean
-  val thinkInline: Boolean
+  val modelPath: Path,
+  val prompt: String?,
+  val suffix: String?,
+  val systemPrompt: String?,
+  val interactive: Boolean,
+  val temperature: Float,
+  val topp: Float,
+  val seed: Long,
+  val maxTokens: Int,
+  val stream: Boolean,
+  val echo: Boolean,
+  val think: Boolean,
+  val thinkInline: Boolean,
   val colors: Boolean
-
-  init {
-    this.modelPath = modelPath
-    this.prompt = prompt
-    this.suffix = suffix
-    this.systemPrompt = systemPrompt
-    this.interactive = interactive
-    this.temperature = temperature
-    this.topp = topp
-    this.seed = seed
-    this.maxTokens = maxTokens
-    this.stream = stream
-    this.echo = echo
-    this.think = think
-    this.thinkInline = thinkInline
-    this.colors = colors
-  }
-
+) {
   companion object {
     const val DEFAULT_MAX_TOKENS: Int = 1024
 
-    fun require(condition: Boolean, messageFormat: String, vararg args: Any) {
+    fun require(condition: Boolean, message: () -> String) {
       if (!condition) {
-        println("ERROR " + messageFormat.formatted(*args))
+        println("ERROR ${message()}")
         println()
         printUsage(System.out)
-        System.exit(-1)
+        exitProcess(-1)
       }
     }
 
@@ -70,7 +38,7 @@ data class Options(
         "true", "on" -> true
         "false", "off" -> false
         else -> {
-          require(false, "Invalid argument for %s: expected true|false|on|off, got %s", optionName, value)
+          require(false) { "Invalid argument for $optionName: expected true|false|on|off, got $value" }
           false
         }
       }
@@ -89,7 +57,7 @@ data class Options(
       out.println("  --temperature, -temp <float>  temperature in [0,inf], default 1.0")
       out.println("  --top-p <float>               p value in top-p (nucleus) sampling in [0,1] default 0.95")
       out.println("  --seed <long>                 random seed, default System.nanoTime()")
-      out.println("  --max-tokens, -n <int>        number of steps to run for < 0 = limited by context length, default " + DEFAULT_MAX_TOKENS)
+      out.println("  --max-tokens, -n <int>        number of steps to run for < 0 = limited by context length, default $DEFAULT_MAX_TOKENS")
       out.println("  --stream <boolean>            print tokens during generation; accepts true|false|on|off, default true")
       out.println("  --echo <boolean>              print ALL tokens to stderr; accepts true|false|on|off, default false")
       out.println("  --color <on|off|auto>         colorize thinking output in terminal (default: auto)")
@@ -124,7 +92,7 @@ data class Options(
       var i = 0
       while (i < args.size) {
         var optionName = args[i]
-        require(optionName.startsWith("-"), "Invalid option %s", optionName)
+        require(optionName.startsWith("-")) { "Invalid option $optionName" }
         when (optionName) {
           "--interactive", "--chat", "-i" -> interactive = true
           "--instruct" -> interactive = false
@@ -140,7 +108,7 @@ data class Options(
               optionName = parts[0]
               nextArg = parts[1]
             } else {
-              require(i + 1 < args.size, "Missing argument for option %s", optionName)
+              require(i + 1 < args.size) { "Missing argument for option $optionName" }
               nextArg = args[i + 1]
               i += 1
             }
@@ -158,38 +126,27 @@ data class Options(
               "--color" -> colorMode = nextArg.lowercase()
               "--think" -> {
                 val thinkMode = nextArg.lowercase()
-                thinkInline = mutableListOf<String>("inline", "stdout").contains(thinkMode)
+                thinkInline = mutableListOf("inline", "stdout").contains(thinkMode)
                 when (thinkMode) {
                   "on", "true", "inline", "stdout" -> think = true
                   "off", "false" -> think = false
-                  else -> require(
-                    false,
-                    "Invalid argument for %s: expected off|on|inline (or false|true|stdout), got %s",
-                    optionName,
-                    nextArg
-                  )
+                  else -> require(false) { "Invalid argument for $optionName: expected off|on|inline (or false|true|stdout), got $nextArg" }
                 }
               }
 
-              else -> require(false, "Unknown option: %s", optionName)
+              else -> require(false) { "Unknown option: $optionName" }
             }
           }
         }
         i++
       }
-      require(
-        mutableListOf<String>("on", "off", "auto").contains(colorMode),
-        "Invalid argument: --color must be one of on|off|auto"
-      )
+
+      require(setOf("on", "off", "auto").contains(colorMode)) { "Invalid argument: --color must be one of on|off|auto" }
       val color = Gemma4.supportsAnsiColors(colorMode)
-      require(modelPath != null, "Missing argument: --model <path> is required")
-      Objects.requireNonNull<Path>(modelPath)
-      require(
-        interactive || prompt != null,
-        "Missing argument: --prompt is required in --instruct mode e.g. --prompt \"Why is the sky blue?\""
-      )
-      require(0 <= temperature, "Invalid argument: --temperature must be non-negative")
-      require(0 <= topp && topp <= 1, "Invalid argument: --top-p must be within [0, 1]")
+      require(modelPath != null) { "Missing argument: --model <path> is required" }
+      require(interactive || prompt != null) { "Missing argument: --prompt is required in --instruct mode e.g. --prompt \"Why is the sky blue?\"" }
+      require(0 <= temperature) { "Invalid argument: --temperature must be non-negative" }
+      require(topp in 0.0..1.0) { "Invalid argument: --top-p must be within [0, 1]" }
       return Options(
         modelPath!!,
         prompt,

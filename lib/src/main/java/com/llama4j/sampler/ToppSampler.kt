@@ -1,24 +1,12 @@
 package com.llama4j.sampler
 
 import com.llama4j.floattensor.FloatTensor
-import java.util.function.ToDoubleFunction
 import java.util.random.RandomGenerator
 
-class ToppSampler(maxNumberOfElements: Int, topp: Float, rng: RandomGenerator) : Sampler {
-  val indices: IntArray
-  val topp: Float
-  val rng: RandomGenerator
-
-  init {
-    this.indices = IntArray(maxNumberOfElements)
-    this.topp = topp
-    this.rng = rng
-  }
+class ToppSampler(maxNumberOfElements: Int, val topp: Float, val rng: RandomGenerator) : Sampler {
+  val indices: IntArray = IntArray(maxNumberOfElements)
 
   override fun sampleToken(logits: FloatTensor): Int {
-    val comparator =
-      Comparator.comparingDouble<Int>(ToDoubleFunction { i: Int -> logits.getFloat(i.toLong()) }).reversed()
-
     val n = Math.toIntExact(logits.size())
     var head = 0
     var tail = n - 1
@@ -32,6 +20,7 @@ class ToppSampler(maxNumberOfElements: Int, topp: Float, rng: RandomGenerator) :
     }
 
     val n0 = head
+    val comparator = Comparator.comparing<Int, Float> { logits.getFloat(it.toLong()) }.reversed()
     for (i in n0 / 2 - 1 downTo 0) {
       siftDown(indices, i, n0, comparator)
     }
