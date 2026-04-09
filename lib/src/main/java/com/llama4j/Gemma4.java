@@ -22,16 +22,21 @@ import com.llama4j.gguf.AOT;
 import com.llama4j.gguf.ModelLoader;
 import com.llama4j.model.*;
 import com.llama4j.sampler.CategoricalSampler;
+import com.llama4j.sampler.Sampler;
 import com.llama4j.sampler.ToppSampler;
 import com.llama4j.tokenizer.GemmaTokenizer;
-import com.llama4j.sampler.Sampler;
 
 import java.io.IOException;
 import java.io.PrintStream;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Scanner;
+import java.util.Set;
 import java.util.function.IntConsumer;
 import java.util.random.RandomGenerator;
 import java.util.random.RandomGeneratorFactory;
+
+import static java.util.Objects.requireNonNull;
 
 public class Gemma4 {
 
@@ -89,17 +94,13 @@ public class Gemma4 {
     static boolean supportsAnsiColors(String colorMode) {
         return switch (colorMode) {
             case "on" -> true;
-            case "off" -> false;
             case "auto" -> {
-                if (System.console() == null) {
-                    yield false;
-                }
                 String noColor = System.getenv("NO_COLOR");
                 if (noColor != null) {
                     yield false;
                 }
                 String term = System.getenv("TERM");
-                yield term == null || !"dumb".equalsIgnoreCase(term);
+                yield !"dumb".equalsIgnoreCase(term);
             }
             default -> false;
         };
@@ -230,19 +231,20 @@ public class Gemma4 {
     }
 
     static void runInstructOnce(Llama model, Sampler sampler, Options options) {
+        var prompt = requireNonNull(options.prompt());
         LlamaState state = model.createNewState();
         GemmaChatFormat chatFormat = new GemmaChatFormat(model.tokenizer());
         List<Integer> promptTokens = new ArrayList<>();
 
         if (options.suffix() != null) {
-            promptTokens.addAll(chatFormat.encodeFillInTheMiddle(options.prompt(), options.suffix()));
+            promptTokens.addAll(chatFormat.encodeFillInTheMiddle(prompt, options.suffix()));
         } else {
             if (options.think()) {
                 promptTokens.addAll(chatFormat.encodeSystemThinkingTurn(options.systemPrompt()));
             } else if (options.systemPrompt() != null) {
                 promptTokens.addAll(chatFormat.encodeMessage(new Message(Role.SYSTEM, options.systemPrompt())));
             }
-            promptTokens.addAll(chatFormat.encodeMessage(new Message(Role.USER, options.prompt())));
+            promptTokens.addAll(chatFormat.encodeMessage(new Message(Role.USER, prompt)));
             promptTokens.addAll(chatFormat.encodeHeader(new Message(Role.MODEL, "")));
         }
 

@@ -3,6 +3,7 @@ package com.llama4j.gguf;
 import com.llama4j.floattensor.FloatTensor;
 import com.llama4j.util.Timer;
 import kotlin.Pair;
+import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
 import java.lang.foreign.Arena;
@@ -14,22 +15,21 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static java.util.Objects.requireNonNull;
+
 public final class GGUF {
     private static final int GGUF_MAGIC = 0x46554747;
     private static final int DEFAULT_ALIGNMENT = 32; // must be a power of 2
     private static final int PARSE_BUFFER_SIZE = 1 << 20;
     private static final List<Integer> SUPPORTED_GGUF_VERSIONS = List.of(2, 3);
-    private int magic;
-    private int version;
     private int tensorCount; // uint64_t
     private int alignment;
-    private int metadata_kv_count; // uint64_t
-    private Map<String, Object> metadata;
-    private Map<String, GGUFTensorInfo> tensorInfos;
+    private @Nullable Map<String, Object> metadata; // lateinit
+    private @Nullable Map<String, GGUFTensorInfo> tensorInfos; // lateinit
     private long tensorDataOffset;
 
     public Map<String, Object> getMetadata() {
-        return metadata;
+        return requireNonNull(metadata);
     }
 
     public long getTensorDataOffset() {
@@ -37,10 +37,8 @@ public final class GGUF {
     }
 
     public Map<String, GGUFTensorInfo> getTensorInfos() {
-        return tensorInfos;
+        return requireNonNull(tensorInfos);
     }
-
-
 
     public static Map<String, GGMLTensorEntry> loadTensors(FileChannel fileChannel, long tensorDataOffset, Map<String, GGUFTensorInfo> tensorInfos) throws IOException {
         Arena arena = Arena.global();
@@ -125,16 +123,17 @@ public final class GGUF {
     }
 
     void readHeader(ChannelReader reader) throws IOException {
-        this.magic = readInt(reader);
+        int magic = readInt(reader);
         if (magic != GGUF_MAGIC) {
             throw new IllegalArgumentException("unsupported header.magic " + magic);
         }
-        this.version = readInt(reader);
+        int version = readInt(reader);
         if (!SUPPORTED_GGUF_VERSIONS.contains(version)) {
             throw new IllegalArgumentException("unsupported header.version " + version);
         }
         this.tensorCount = Math.toIntExact(readLong(reader));
-        this.metadata_kv_count = Math.toIntExact(readLong(reader));
+        // uint64_t
+        int metadata_kv_count = Math.toIntExact(readLong(reader));
         this.metadata = HashMap.newHashMap(metadata_kv_count);
         for (int i = 0; i < metadata_kv_count; ++i) {
             Pair<String, Object> keyValue = readKeyValuePair(reader);
@@ -255,7 +254,7 @@ public final class GGUF {
         if (alignment != 0) {
             return alignment;
         }
-        alignment = (int) metadata.getOrDefault("general.alignment", DEFAULT_ALIGNMENT);
+        alignment = (int) requireNonNull(metadata).getOrDefault("general.alignment", DEFAULT_ALIGNMENT);
         assert Integer.bitCount(alignment) == 1 : "alignment must be a power of two";
         return alignment;
     }

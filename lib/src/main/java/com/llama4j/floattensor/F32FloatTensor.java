@@ -9,6 +9,8 @@ import java.lang.foreign.MemorySegment;
 import java.lang.foreign.ValueLayout;
 import java.nio.ByteOrder;
 
+import static java.util.Objects.requireNonNull;
+
 final class F32FloatTensor extends FloatTensor {
 
     private final long size;
@@ -50,7 +52,7 @@ final class F32FloatTensor extends FloatTensor {
     }
 
     private static float vectorDot(F32FloatTensor thiz, int thisOffset, ArrayFloatTensor that, int thatOffset, int size) {
-        FloatVector val = FloatVector.zero(F_SPECIES);
+        FloatVector val = FloatVector.zero(requireNonNull(F_SPECIES));
         int upperBound = F_SPECIES.loopBound(size);
         for (int i = 0; i < upperBound; i += F_SPECIES.length()) {
             var a = FloatVector.fromMemorySegment(F_SPECIES, thiz.memorySegment, (long) (thisOffset + i) * Float.BYTES, ByteOrder.LITTLE_ENDIAN);

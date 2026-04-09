@@ -9,6 +9,8 @@ import jdk.incubator.vector.VectorSpecies;
 import java.lang.foreign.MemorySegment;
 import java.nio.ByteOrder;
 
+import static java.util.Objects.requireNonNull;
+
 final class Q4_1FloatTensor extends FloatTensor {
 
     final long size;
@@ -63,7 +65,7 @@ final class Q4_1FloatTensor extends FloatTensor {
         }
         assert (thisOffset + j) % GGMLType.Q4_1.getBlockSize() == 0;
 
-        FloatVector val = FloatVector.zero(F_SPECIES);
+        FloatVector val = FloatVector.zero(requireNonNull(F_SPECIES));
         long blockOffset = (long) (thisOffset + j) / GGMLType.Q4_1.getBlockSize() * GGMLType.Q4_1.getTypeSize();
         int upperBound = j + (size - j) / GGMLType.Q4_1.getBlockSize() * GGMLType.Q4_1.getBlockSize();
         for (; j < upperBound; j += GGMLType.Q4_1.getBlockSize(), blockOffset += GGMLType.Q4_1.getTypeSize()) {

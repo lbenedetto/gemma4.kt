@@ -7,6 +7,8 @@ import com.llama4j.model.LlamaWeights;
 import com.llama4j.model.RoPE;
 import com.llama4j.util.Timer;
 import kotlin.Pair;
+import org.jetbrains.annotations.Contract;
+import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
 import java.nio.FloatBuffer;
@@ -17,11 +19,15 @@ import java.nio.file.StandardOpenOption;
 import java.util.Map;
 import java.util.Objects;
 
+import static java.util.Objects.requireNonNull;
+
 public final class AOT {
 
-    private static final PartialModel PRELOADED_GGUF = preLoadGGUF(System.getProperty("gemma4.PreloadGGUF"));
+    private static final @Nullable PartialModel PRELOADED_GGUF = preLoadGGUF(System.getProperty("gemma4.PreloadGGUF"));
 
-    private static PartialModel preLoadGGUF(String modelPath) {
+    @Nullable
+    @Contract("null -> null")
+    private static PartialModel preLoadGGUF(@Nullable String modelPath) {
         if (modelPath == null || modelPath.isEmpty()) {
             return null;
         }
@@ -40,7 +46,7 @@ public final class AOT {
                 // Read rope_freqs from model file
                 Pair<float[], float[]> ropeFreqsFull;
                 Map<String, GGMLTensorEntry> tmpEntries = GGUF.loadTensors(fileChannel, gguf.getTensorDataOffset(), gguf.getTensorInfos());
-                FloatBuffer ropeFreqsBuf = ModelLoader.toFloatBuffer(tmpEntries.get("rope_freqs.weight"));
+                FloatBuffer ropeFreqsBuf = ModelLoader.toFloatBuffer(requireNonNull(tmpEntries.get("rope_freqs.weight")));
                 float[] modelRopeFreqs = new float[ropeFreqsBuf.remaining()];
                 ropeFreqsBuf.get(modelRopeFreqs);
                 ropeFreqsFull = RoPE.precomputeFreqsCisFromFreqs(
@@ -55,6 +61,7 @@ public final class AOT {
         }
     }
 
+    @Nullable
     public static Llama tryUsePreLoaded(Path modelPath, int contextLength) throws IOException {
         PartialModel preLoaded = AOT.PRELOADED_GGUF;
         if (preLoaded == null) {

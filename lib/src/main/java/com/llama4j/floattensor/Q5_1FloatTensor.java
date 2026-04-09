@@ -7,6 +7,8 @@ import jdk.incubator.vector.VectorSpecies;
 
 import java.lang.foreign.MemorySegment;
 
+import static java.util.Objects.requireNonNull;
+
 final class Q5_1FloatTensor extends FloatTensor {
 
     private final long size;
@@ -75,7 +77,7 @@ final class Q5_1FloatTensor extends FloatTensor {
 
         float[] decoded = new float[GGMLType.Q5_1.getBlockSize()];
         int upperBound = j + (size - j) / GGMLType.Q5_1.getBlockSize() * GGMLType.Q5_1.getBlockSize();
-        int vecUpper = F_SPECIES.loopBound(GGMLType.Q5_1.getBlockSize());
+        int vecUpper = requireNonNull(F_SPECIES).loopBound(GGMLType.Q5_1.getBlockSize());
         for (; j < upperBound; j += GGMLType.Q5_1.getBlockSize()) {
             assert (thisOffset + j) % GGMLType.Q5_1.getBlockSize() == 0;
             long blockOffset = (long) (thisOffset + j) / GGMLType.Q5_1.getBlockSize() * GGMLType.Q5_1.getTypeSize();

@@ -2,6 +2,7 @@ package com.llama4j.model;
 
 import com.llama4j.floattensor.ArrayFloatTensor;
 import com.llama4j.floattensor.FloatTensor;
+import org.jspecify.annotations.Nullable;
 
 import java.util.stream.IntStream;
 
@@ -21,15 +22,15 @@ public final class LlamaState {
   public final FloatTensor[] keyCache;   // (n_layer, seq_len, kvDim_per_layer)
   public final FloatTensor[] valueCache; // (n_layer, seq_len, kvDim_per_layer)
   // per-layer embedding buffers
-  public final FloatTensor perLayerInputs;
-  public final FloatTensor plGate;
-  public final FloatTensor plProj;
+  public final @Nullable FloatTensor perLayerInputs;
+  public final @Nullable FloatTensor plGate;
+  public final @Nullable FloatTensor plProj;
   // MoE buffers
-  public final FloatTensor routerLogits;    // (n_experts,)
-  public final FloatTensor moeInput;        // (n_embd,) pre-normed MoE input
-  public final FloatTensor moeOutput;       // (n_embd,) accumulated expert output
-  public final FloatTensor expertGateUp;    // (2 * expert_ff,)
-  public final FloatTensor expertDown;      // (n_embd,) single expert output
+  public final @Nullable FloatTensor routerLogits;    // (n_experts,)
+  public final @Nullable FloatTensor moeInput;        // (n_embd,) pre-normed MoE input
+  public final @Nullable FloatTensor moeOutput;       // (n_embd,) accumulated expert output
+  public final @Nullable FloatTensor expertGateUp;    // (2 * expert_ff,)
+  public final @Nullable FloatTensor expertDown;      // (n_embd,) single expert output
 
   public int latestToken;
 

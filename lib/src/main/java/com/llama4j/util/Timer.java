@@ -1,5 +1,6 @@
 package com.llama4j.util;
 
+import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 
 public interface Timer extends AutoCloseable {
@@ -19,7 +20,7 @@ public interface Timer extends AutoCloseable {
                 long elapsedNanos = System.nanoTime() - startNanos;
                 System.err.println(label + ": "
                         + timeUnit.convert(elapsedNanos, TimeUnit.NANOSECONDS) + " "
-                        + timeUnit.toChronoUnit().name().toLowerCase());
+                        + timeUnit.toChronoUnit().name().toLowerCase(Locale.ROOT));
             }
         };
     }

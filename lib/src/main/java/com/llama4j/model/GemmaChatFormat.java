@@ -1,8 +1,11 @@
 package com.llama4j.model;
 
 import com.llama4j.tokenizer.GemmaTokenizer;
+import org.jspecify.annotations.Nullable;
 
 import java.util.*;
+
+import static java.util.Objects.requireNonNull;
 
 public class GemmaChatFormat {
 
@@ -19,10 +22,10 @@ public class GemmaChatFormat {
     public GemmaChatFormat(GemmaTokenizer tokenizer) {
         this.tokenizer = tokenizer;
         Map<String, Integer> specialTokens = this.tokenizer.getSpecialTokens();
-        this.beginOfSentence = specialTokens.get("<bos>");
-        this.startOfTurn = specialTokens.get("<|turn>");
-        this.endOfTurn = specialTokens.get("<turn|>");
-        this.endOfSentence = specialTokens.get("<eos>");
+        this.beginOfSentence = requireNonNull(specialTokens.get("<bos>"));
+        this.startOfTurn = requireNonNull(specialTokens.get("<|turn>"));
+        this.endOfTurn = requireNonNull(specialTokens.get("<turn|>"));
+        this.endOfSentence = requireNonNull(specialTokens.get("<eos>"));
 
         this.fimSuffix = specialTokens.getOrDefault("<|fim_suffix|>", -1);
         this.fimPrefix = specialTokens.getOrDefault("<|fim_prefix|>", -1);
@@ -65,11 +68,10 @@ public class GemmaChatFormat {
         return tokens;
     }
 
-    public List<Integer> encodeSystemThinkingTurn(String systemPrompt) {
+    public List<Integer> encodeSystemThinkingTurn(@Nullable String systemPrompt) {
         // Matches Gemma4 template with enable_thinking=true:
         // <|turn>system\n<|think|>[system_content]<turn|>\n
-        List<Integer> tokens = new ArrayList<>();
-        tokens.addAll(encodeHeader(new Message(Role.SYSTEM, "")));
+        List<Integer> tokens = new ArrayList<>(encodeHeader(new Message(Role.SYSTEM, "")));
         Integer thinkToken = tokenizer.getSpecialTokens().get("<|think|>");
         if (thinkToken != null) {
             tokens.add(thinkToken);

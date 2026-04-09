@@ -9,6 +9,8 @@ import jdk.incubator.vector.VectorSpecies;
 import java.lang.foreign.MemorySegment;
 import java.nio.ByteOrder;
 
+import static java.util.Objects.requireNonNull;
+
 final class F16FloatTensor extends FloatTensor {
 
     final long size;
@@ -28,7 +30,7 @@ final class F16FloatTensor extends FloatTensor {
     @Override
     public float getFloat(long index) {
         assert 0 <= index && index < size;
-        return readFloat16(memorySegment, (long) index * 2);
+        return readFloat16(memorySegment, index * 2);
     }
 
     @Override
@@ -41,13 +43,13 @@ final class F16FloatTensor extends FloatTensor {
     }
 
     private static float vectorDot(F16FloatTensor thiz, int thisOffset, ArrayFloatTensor that, int thatOffset, int size) {
-        assert S_SPECIES_HALF.length() == F_SPECIES.length();
-        FloatVector val = FloatVector.zero(F_SPECIES);
+        assert requireNonNull(S_SPECIES_HALF).length() == requireNonNull(F_SPECIES).length();
+        FloatVector val = FloatVector.zero(requireNonNull(F_SPECIES));
         int upperBound = F_SPECIES.loopBound(size);
         for (int i = 0; i < upperBound; i += F_SPECIES.length()) {
             FloatVector thatVector = that.getFloatVector(F_SPECIES, thatOffset + i);
             ShortVector bits16 = ShortVector.fromMemorySegment(S_SPECIES_HALF, thiz.memorySegment, (thisOffset + i) * 2L, ByteOrder.LITTLE_ENDIAN);
-            var bits32 = bits16.castShape(I_SPECIES, 0).reinterpretAsInts();
+            var bits32 = bits16.castShape(requireNonNull(I_SPECIES), 0).reinterpretAsInts();
             var zeroExponentMask = bits32.and(0x7C00).neg().lanewise(VectorOperators.ASHR, 31);
             bits32 = bits32.and(0x8000).lanewise(VectorOperators.LSHL, 16)
                     .or(bits32.and(0x7FFF).add(0x1C000).lanewise(VectorOperators.LSHL, 13).and(zeroExponentMask));

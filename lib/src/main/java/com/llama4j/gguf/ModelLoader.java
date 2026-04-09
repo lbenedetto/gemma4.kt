@@ -10,6 +10,7 @@ import com.llama4j.tokenizer.GemmaTokenizer;
 import com.llama4j.tokenizer.Vocabulary;
 import com.llama4j.util.Timer;
 import kotlin.Pair;
+import org.jspecify.annotations.Nullable;
 
 import java.io.IOException;
 import java.nio.ByteOrder;
@@ -21,11 +22,13 @@ import java.util.Arrays;
 import java.util.Map;
 import java.util.function.IntFunction;
 
+import static java.util.Objects.requireNonNull;
+
 public final class ModelLoader {
 
     private static Vocabulary loadVocabulary(Map<String, Object> metadata) {
-        String[] tokens = (String[]) metadata.get("tokenizer.ggml.tokens");
-        float[] scores = (float[]) metadata.get("tokenizer.ggml.scores");
+        String[] tokens = requireNonNull((String[]) metadata.get("tokenizer.ggml.tokens"));
+        float[] scores = requireNonNull((float[]) metadata.get("tokenizer.ggml.scores"));
         return new Vocabulary(tokens, scores);
     }
 
@@ -38,24 +41,24 @@ public final class ModelLoader {
         }
     }
 
-    public static Llama loadModel(FileChannel fileChannel, GGUF gguf, int contextLength, boolean loadWeightsFlag) throws IOException {
+    public static Llama loadModel(@Nullable FileChannel fileChannel, GGUF gguf, int contextLength, boolean loadWeightsFlag) throws IOException {
         Map<String, Object> metadata = gguf.getMetadata();
 
         Vocabulary vocabulary = loadVocabulary(metadata);
         GemmaTokenizer tokenizer = createTokenizer(metadata, vocabulary);
 
-        int modelContextLength = (int) metadata.get("gemma4.context_length");
+        int modelContextLength = (int) requireNonNull(metadata.get("gemma4.context_length"));
         if (contextLength < 0 || modelContextLength < contextLength) {
             contextLength = modelContextLength;
         }
 
-        int embeddingLength = (int) metadata.get("gemma4.embedding_length");
-        int numberOfHeads = (int) metadata.get("gemma4.attention.head_count");
-        int numberOfLayers = (int) metadata.get("gemma4.block_count");
+        int embeddingLength = (int) requireNonNull(metadata.get("gemma4.embedding_length"));
+        int numberOfHeads = (int) requireNonNull(metadata.get("gemma4.attention.head_count"));
+        int numberOfLayers = (int) requireNonNull(metadata.get("gemma4.block_count"));
 
-        int headSizeFull = (int) metadata.get("gemma4.attention.key_length");
-        int headSizeSWA = (int) metadata.get("gemma4.attention.key_length_swa");
-        int slidingWindow = (int) metadata.get("gemma4.attention.sliding_window");
+        int headSizeFull = (int) requireNonNull(metadata.get("gemma4.attention.key_length"));
+        int headSizeSWA = (int) requireNonNull(metadata.get("gemma4.attention.key_length_swa"));
+        int slidingWindow = (int) requireNonNull(metadata.get("gemma4.attention.sliding_window"));
         float logitSoftcapping = (float) metadata.getOrDefault("gemma4.final_logit_softcapping", 0f);
         float rmsNormEps = (float) metadata.getOrDefault("gemma4.attention.layer_norm_rms_epsilon", 1e-6f);
         float ropeTheta = (float) metadata.getOrDefault("gemma4.rope.freq_base", 1000000f);
@@ -73,7 +76,7 @@ public final class ModelLoader {
             feedForwardLength = arr;
         } else {
             feedForwardLength = new int[numberOfLayers];
-            Arrays.fill(feedForwardLength, (int) ffnRaw);
+            Arrays.fill(feedForwardLength, (int) requireNonNull(ffnRaw));
         }
 
         Map<String, GGUFTensorInfo> tensorInfos = gguf.getTensorInfos();
@@ -143,14 +146,14 @@ public final class ModelLoader {
             return new Llama(config, tokenizer, null);
         }
 
-        Map<String, GGMLTensorEntry> tensorEntries = GGUF.loadTensors(fileChannel, gguf.getTensorDataOffset(), tensorInfos);
+        Map<String, GGMLTensorEntry> tensorEntries = GGUF.loadTensors(requireNonNull(fileChannel), gguf.getTensorDataOffset(), tensorInfos);
         LlamaWeights qw = loadWeights(tensorEntries, config);
         return new Llama(config, tokenizer, qw);
     }
 
     public static LlamaWeights loadWeights(Map<String, GGMLTensorEntry> tensorEntries, LlamaConfiguration config) {
         Pair<float[], float[]> ropeFreqsSWA = RoPE.precomputeFreqsCis(config.contextLength, config.headSizeSWA, config.ropeThetaSWA);
-        FloatBuffer ropeFreqsBuf = toFloatBuffer(tensorEntries.get("rope_freqs.weight"));
+        FloatBuffer ropeFreqsBuf = toFloatBuffer(requireNonNull(tensorEntries.get("rope_freqs.weight")));
         float[] modelRopeFreqs = new float[ropeFreqsBuf.remaining()];
         ropeFreqsBuf.get(modelRopeFreqs);
         Pair<float[], float[]> ropeFreqsFull = RoPE.precomputeFreqsCisFromFreqs(config.contextLength, config.headSizeFull, config.ropeTheta, modelRopeFreqs);
@@ -161,7 +164,7 @@ public final class ModelLoader {
                                                    Pair<float[], float[]> ropeFreqsSWA, Pair<float[], float[]> ropeFreqsFull) {
         int numberOfLayers = config.numberOfLayers;
 
-        FloatTensor tokenEmbeddingTable = loadQuantized(tensorEntries.get("token_embd.weight"));
+        FloatTensor tokenEmbeddingTable = loadQuantized(requireNonNull(tensorEntries.get("token_embd.weight")));
 
         // Load per-layer output scale (scalar per layer)
         float[] layerOutputScale = new float[config.numberOfLayers];
@@ -183,16 +186,16 @@ public final class ModelLoader {
         FloatBuffer[] perLayerPostNorm = null;
 
         if (config.embeddingLengthPerLayer > 0 && tensorEntries.containsKey("per_layer_token_embd.weight")) {
-            perLayerTokenEmbd = loadQuantized(tensorEntries.get("per_layer_token_embd.weight"));
-            perLayerModelProj = loadQuantized(tensorEntries.get("per_layer_model_proj.weight"));
-            perLayerProjNorm = toFloatBuffer(tensorEntries.get("per_layer_proj_norm.weight"));
-            perLayerInpGate = loadArrayOfQuantized(config.numberOfLayers, i -> tensorEntries.get("blk." + i + ".inp_gate.weight"));
-            perLayerProj = loadArrayOfQuantized(config.numberOfLayers, i -> tensorEntries.get("blk." + i + ".proj.weight"));
-            perLayerPostNorm = loadArrayOfFloatBuffer(config.numberOfLayers, i -> tensorEntries.get("blk." + i + ".post_norm.weight"));
+            perLayerTokenEmbd = loadQuantized(requireNonNull(tensorEntries.get("per_layer_token_embd.weight")));
+            perLayerModelProj = loadQuantized(requireNonNull(tensorEntries.get("per_layer_model_proj.weight")));
+            perLayerProjNorm = toFloatBuffer(requireNonNull(tensorEntries.get("per_layer_proj_norm.weight")));
+            perLayerInpGate = loadArrayOfQuantized(config.numberOfLayers, i -> requireNonNull(tensorEntries.get("blk." + i + ".inp_gate.weight")));
+            perLayerProj = loadArrayOfQuantized(config.numberOfLayers, i -> requireNonNull(tensorEntries.get("blk." + i + ".proj.weight")));
+            perLayerPostNorm = loadArrayOfFloatBuffer(config.numberOfLayers, i -> requireNonNull(tensorEntries.get("blk." + i + ".post_norm.weight")));
         }
 
         // Load V weights (nullable: layers without V use K as V)
-        FloatTensor[] wv = new FloatTensor[numberOfLayers];
+        @Nullable FloatTensor[] wv = new FloatTensor[numberOfLayers];
         for (int i = 0; i < numberOfLayers; i++) {
             GGMLTensorEntry vEntry = tensorEntries.get("blk." + i + ".attn_v.weight");
             wv[i] = vEntry != null ? loadQuantized(vEntry) : null;
@@ -234,7 +237,7 @@ public final class ModelLoader {
                 loadArrayOfQuantized(config.numberOfLayers, i -> tensorEntries.get("blk." + i + ".ffn_down.weight")),
                 loadArrayOfQuantized(config.numberOfLayers, i -> tensorEntries.get("blk." + i + ".ffn_up.weight")),
                 loadArrayOfFloatBuffer(config.numberOfLayers, i -> tensorEntries.get("blk." + i + ".post_ffw_norm.weight")),
-                toFloatBuffer(tensorEntries.get("output_norm.weight")),
+                toFloatBuffer(requireNonNull(tensorEntries.get("output_norm.weight"))),
                 layerOutputScale,
                 FloatBuffer.wrap(ropeFreqsFull.getFirst()),
                 FloatBuffer.wrap(ropeFreqsFull.getSecond()),
@@ -251,7 +254,7 @@ public final class ModelLoader {
     }
 
     private static GemmaTokenizer createTokenizer(Map<String, Object> metadata, Vocabulary vocabulary) {
-        int[] tokenTypes = (int[]) metadata.get("tokenizer.ggml.token_type");
+        int[] tokenTypes = (int[]) requireNonNull(metadata.get("tokenizer.ggml.token_type"));
         return new GemmaTokenizer(vocabulary, tokenTypes);
     }
 

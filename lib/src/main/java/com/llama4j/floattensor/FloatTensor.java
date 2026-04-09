@@ -5,6 +5,7 @@ import com.llama4j.util.Parallel;
 import jdk.incubator.vector.FloatVector;
 import jdk.incubator.vector.VectorShape;
 import jdk.incubator.vector.VectorSpecies;
+import org.jspecify.annotations.Nullable;
 
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.ValueLayout;
@@ -14,9 +15,9 @@ public abstract class FloatTensor {
     static final int VECTOR_BIT_SIZE = Integer.getInteger("llama.VectorBitSize", VectorShape.preferredShape().vectorBitSize());
     static final boolean USE_VECTOR_API = VECTOR_BIT_SIZE != 0;
 
-    static final VectorSpecies<Float> F_SPECIES;
-    static final VectorSpecies<Integer> I_SPECIES;
-    static final VectorSpecies<Short> S_SPECIES_HALF;
+    static final @Nullable VectorSpecies<Float> F_SPECIES;
+    static final @Nullable VectorSpecies<Integer> I_SPECIES;
+    static final @Nullable VectorSpecies<Short> S_SPECIES_HALF;
 
     static {
         if (USE_VECTOR_API) {
@@ -168,7 +169,7 @@ public abstract class FloatTensor {
     }
 
     public FloatTensor fillInPlace(int thisOffset, int size, float value) {
-        return mapInPlace(thisOffset, size, unused -> value);
+        return mapInPlace(thisOffset, size, _ -> value);
     }
 
     public FloatTensor softmaxInPlace(int thisOffset, int size) {

@@ -9,6 +9,8 @@ import jdk.incubator.vector.VectorSpecies;
 import java.lang.foreign.MemorySegment;
 import java.nio.ByteOrder;
 
+import static java.util.Objects.requireNonNull;
+
 final class Q5_KFloatTensor extends FloatTensor {
 
     static final int BLOCK_SIZE = GGMLType.QK_K;
@@ -78,7 +80,7 @@ final class Q5_KFloatTensor extends FloatTensor {
             j += alignmentBound;
         }
 
-        FloatVector val = FloatVector.zero(F_SPECIES);
+        FloatVector val = FloatVector.zero(requireNonNull(F_SPECIES));
         FloatVector val2 = FloatVector.zero(F_SPECIES);
         long blockOffset = (long) (thisOffset + j) / BLOCK_SIZE * TYPE_SIZE;
         int upperBound = j + (size - j) / BLOCK_SIZE * BLOCK_SIZE;

@@ -9,6 +9,8 @@ import jdk.incubator.vector.VectorSpecies;
 import java.lang.foreign.MemorySegment;
 import java.nio.ByteOrder;
 
+import static java.util.Objects.requireNonNull;
+
 final class MXFP4FloatTensor extends FloatTensor {
 
     private static final int[] MXFP4_VALUES = {0, 1, 2, 3, 4, 6, 8, 12, 0, -1, -2, -3, -4, -6, -8, -12};
@@ -77,7 +79,7 @@ final class MXFP4FloatTensor extends FloatTensor {
             ByteVector hi = packed.lanewise(VectorOperators.LSHR, 4);
 
             float blockSum = 0f;
-            switch (F_SPECIES.vectorBitSize()) {
+            switch (requireNonNull(F_SPECIES).vectorBitSize()) {
                 case 512 -> {
                     FloatVector loCoeffs = mxfp4CodesToCoeffs((FloatVector) lo.castShape(F_SPECIES, 0));
                     FloatVector hiCoeffs = mxfp4CodesToCoeffs((FloatVector) hi.castShape(F_SPECIES, 0));

@@ -8,6 +8,8 @@ import jdk.incubator.vector.VectorSpecies;
 import java.nio.FloatBuffer;
 import java.util.Arrays;
 
+import static java.util.Objects.requireNonNull;
+
 public final class ArrayFloatTensor extends FloatTensor {
 
     final long size;
@@ -76,7 +78,7 @@ public final class ArrayFloatTensor extends FloatTensor {
     }
 
     private static float vectorDot(ArrayFloatTensor thiz, int thisOffset, ArrayFloatTensor that, int thatOffset, int size) {
-        FloatVector val = FloatVector.zero(F_SPECIES);
+        FloatVector val = FloatVector.zero(requireNonNull(F_SPECIES));
         int upperBound = F_SPECIES.loopBound(size);
         for (int i = 0; i < upperBound; i += F_SPECIES.length()) {
             var a = FloatVector.fromArray(F_SPECIES, thiz.values, thisOffset + i);

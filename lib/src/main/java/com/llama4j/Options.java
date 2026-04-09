@@ -1,23 +1,32 @@
 package com.llama4j;
 
+import org.jspecify.annotations.Nullable;
+
 import java.io.PrintStream;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Locale;
 
-public record Options(Path modelPath, String prompt, String suffix, String systemPrompt, boolean interactive,
-               float temperature, float topp, long seed, int maxTokens, boolean stream, boolean echo,
-               boolean think, boolean thinkInline, boolean colors) {
+import static java.util.Objects.requireNonNull;
+
+public record Options(
+        Path modelPath,
+        @Nullable String prompt,
+        @Nullable String suffix,
+        @Nullable String systemPrompt,
+        boolean interactive,
+        float temperature,
+        float topp,
+        long seed,
+        int maxTokens,
+        boolean stream,
+        boolean echo,
+        boolean think,
+        boolean thinkInline,
+        boolean colors
+) {
 
   public static final int DEFAULT_MAX_TOKENS = 1024;
-
-
-  public Options {
-    require(modelPath != null, "Missing argument: --model <path> is required");
-    require(interactive || prompt != null, "Missing argument: --prompt is required in --instruct mode e.g. --prompt \"Why is the sky blue?\"");
-    require(0 <= temperature, "Invalid argument: --temperature must be non-negative");
-    require(0 <= topp && topp <= 1, "Invalid argument: --top-p must be within [0, 1]");
-  }
 
   static void require(boolean condition, String messageFormat, Object... args) {
     if (!condition) {
@@ -134,6 +143,11 @@ public record Options(Path modelPath, String prompt, String suffix, String syste
     }
     require(List.of("on", "off", "auto").contains(colorMode), "Invalid argument: --color must be one of on|off|auto");
     boolean color = Gemma4.supportsAnsiColors(colorMode);
+    require(modelPath != null, "Missing argument: --model <path> is required");
+    requireNonNull(modelPath);
+    require(interactive || prompt != null, "Missing argument: --prompt is required in --instruct mode e.g. --prompt \"Why is the sky blue?\"");
+    require(0 <= temperature, "Invalid argument: --temperature must be non-negative");
+    require(0 <= topp && topp <= 1, "Invalid argument: --top-p must be within [0, 1]");
     return new Options(modelPath, prompt, suffix, systemPrompt, interactive, temperature, topp, seed, maxTokens, stream, echo, think, thinkInline, color);
   }
 }

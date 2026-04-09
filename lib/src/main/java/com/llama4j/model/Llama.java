@@ -1,9 +1,10 @@
 package com.llama4j.model;
 
-import com.llama4j.tokenizer.GemmaTokenizer;
-import com.llama4j.util.Parallel;
 import com.llama4j.floattensor.FloatTensor;
 import com.llama4j.sampler.Sampler;
+import com.llama4j.tokenizer.GemmaTokenizer;
+import com.llama4j.util.Parallel;
+import org.jspecify.annotations.Nullable;
 
 import java.nio.FloatBuffer;
 import java.util.ArrayList;
@@ -11,10 +12,12 @@ import java.util.List;
 import java.util.Set;
 import java.util.function.IntConsumer;
 
-public record Llama(LlamaConfiguration configuration, GemmaTokenizer tokenizer, LlamaWeights weights) {
+import static java.util.Objects.requireNonNull;
+
+public record Llama(LlamaConfiguration configuration, GemmaTokenizer tokenizer, @Nullable LlamaWeights weights) {
     public LlamaState createNewState() {
         LlamaState state = new LlamaState(configuration());
-        state.latestToken = tokenizer.getSpecialTokens().get("<bos>");
+        state.latestToken = requireNonNull((tokenizer).getSpecialTokens().get("<bos>"));
         return state;
     }
 
@@ -67,7 +70,7 @@ public record Llama(LlamaConfiguration configuration, GemmaTokenizer tokenizer, 
         float sqrtDim = (float) Math.sqrt(dim);
 
         // copy the token embedding into x
-        weights.token_embedding_table.copyTo(token * dim, state.x, 0, dim);
+        requireNonNull(weights).token_embedding_table.copyTo(token * dim, state.x, 0, dim);
         state.x.mapInPlace(v -> v * sqrtDim);
 
         // Compute per-layer inputs (if model has per-layer embeddings)
@@ -79,11 +82,11 @@ public record Llama(LlamaConfiguration configuration, GemmaTokenizer tokenizer, 
             float inputScale = (float) (1.0 / Math.sqrt(2.0));
 
             // Project x through perLayerModelProj, scale, and RMS norm per chunk
-            weights.perLayerModelProj.matmul(state.x, state.perLayerInputs, plTotal, dim);
+            requireNonNull(weights.perLayerModelProj).matmul(state.x, requireNonNull(state.perLayerInputs), plTotal, dim);
             state.perLayerInputs.mapInPlace(0, plTotal, v -> v * projScale);
             for (int l = 0; l < config.numberOfLayers; l++) {
                 rmsnorm(state.perLayerInputs, l * plDim, state.perLayerInputs, l * plDim,
-                        weights.perLayerProjNorm, plDim, config.rmsNormEps);
+                        requireNonNull(weights.perLayerProjNorm), plDim, config.rmsNormEps);
             }
 
             // Add per-layer token embedding scaled by sqrt(plDim)
@@ -170,26 +173,23 @@ public record Llama(LlamaConfiguration configuration, GemmaTokenizer tokenizer, 
 
             // Attention (scale=1.0, no 1/sqrt(headSize))
             int attStart = layerIsSWA ? Math.max(0, position - config.slidingWindow + 1) : 0;
-            int finalKvLayer = kvLayer;
-            int finalKvDim = kvDim;
-            int finalAttStart = attStart;
 
             Parallel.parallelFor(0, config.numberOfHeads, h -> {
                 int qOffset = h * headSize;
                 int attOffset = h * config.contextLength;
-                for (int t = finalAttStart; t <= position; t++) {
-                    int keyCacheOffset = t * finalKvDim + (h / kvMul) * headSize;
-                    float score = state.q.dot(qOffset, state.keyCache[finalKvLayer], keyCacheOffset, headSize);
+                for (int t = attStart; t <= position; t++) {
+                    int keyCacheOffset = t * kvDim + (h / kvMul) * headSize;
+                    float score = state.q.dot(qOffset, state.keyCache[kvLayer], keyCacheOffset, headSize);
                     state.att.setFloat(attOffset + t, score);
                 }
 
-                state.att.softmaxInPlace(attOffset + finalAttStart, position - finalAttStart + 1);
+                state.att.softmaxInPlace(attOffset + attStart, position - attStart + 1);
                 int xbOffset = h * headSize;
                 state.xb_k.fillInPlace(xbOffset, headSize, 0f);
-                for (int t = finalAttStart; t <= position; t++) {
-                    int vOffset = t * finalKvDim + (h / kvMul) * headSize;
+                for (int t = attStart; t <= position; t++) {
+                    int vOffset = t * kvDim + (h / kvMul) * headSize;
                     float a = state.att.getFloat(attOffset + t);
-                    state.xb_k.saxpyInPlace(xbOffset, state.valueCache[finalKvLayer], vOffset, headSize, a);
+                    state.xb_k.saxpyInPlace(xbOffset, state.valueCache[kvLayer], vOffset, headSize, a);
                 }
             });
 
@@ -199,7 +199,7 @@ public record Llama(LlamaConfiguration configuration, GemmaTokenizer tokenizer, 
             state.x.addInPlace(state.xb2);
 
             // FFN
-            boolean isMoELayer = config.isMoE() && weights.ffnGateInp[l] != null;
+            boolean isMoELayer = config.isMoE() && requireNonNull(weights.ffnGateInp)[l] != null;
             if (isMoELayer) {
                 // === MoE FFN: shared MLP + expert MoE ===
 
@@ -210,11 +210,11 @@ public record Llama(LlamaConfiguration configuration, GemmaTokenizer tokenizer, 
                 state.hb.mapInPlace(0, hiddenDim, Llama::gelu);
                 state.hb.multiplyInPlace(0, state.hb2, 0, hiddenDim);
                 weights.w2[l].matmul(state.hb, state.xb, dim, hiddenDim);
-                rmsnorm(state.xb, state.xb, weights.ffnPostNorm1[l], dim, config.rmsNormEps);
+                rmsnorm(state.xb, state.xb, requireNonNull(weights.ffnPostNorm1)[l], dim, config.rmsNormEps);
                 // state.xb now holds shared MLP output
 
                 // Expert MoE path: pre_norm_2 -> routing -> expert FFN -> post_norm_2
-                rmsnorm(state.moeInput, state.x, weights.preFfwNorm2[l], dim, config.rmsNormEps);
+                rmsnorm(requireNonNull(state.moeInput), state.x, requireNonNull(weights.preFfwNorm2)[l], dim, config.rmsNormEps);
 
                 // Router: rms_norm(x) -> scale(1/sqrt(dim)) -> elementwise_mul(gate_inp_s) -> matmul(gate_inp) -> softmax -> top-k
                 {
@@ -223,10 +223,10 @@ public record Llama(LlamaConfiguration configuration, GemmaTokenizer tokenizer, 
                     ss += config.rmsNormEps;
                     float rmsScale = (float) (1.0 / Math.sqrt(ss)) / (float) Math.sqrt(dim);
                     for (int i = 0; i < dim; i++) {
-                        state.xb2.setFloat(i, state.x.getFloat(i) * rmsScale * weights.ffnGateInpScale[l].get(i));
+                        state.xb2.setFloat(i, state.x.getFloat(i) * rmsScale * requireNonNull(weights.ffnGateInpScale)[l].get(i));
                     }
                 }
-                weights.ffnGateInp[l].matmul(state.xb2, state.routerLogits, config.expertCount, dim);
+                requireNonNull(requireNonNull(weights.ffnGateInp)[l]).matmul(state.xb2, requireNonNull(state.routerLogits), config.expertCount, dim);
 
                 // Softmax over router logits
                 state.routerLogits.softmaxInPlace(0, config.expertCount);
@@ -254,16 +254,16 @@ public record Llama(LlamaConfiguration configuration, GemmaTokenizer tokenizer, 
                 // Run selected experts and accumulate
                 int expertFF = config.expertFeedForwardLength;
                 int gateUpDim = 2 * expertFF;
-                state.moeOutput.fillInPlace(0, dim, 0f);
+                requireNonNull(state.moeOutput).fillInPlace(0, dim, 0f);
 
                 for (int ki = 0; ki < topK; ki++) {
                     int expertIdx = topExperts[ki];
                     float prob = topProbs[ki];
-                    float downScale = weights.ffnDownExpsScale[l].get(expertIdx);
+                    float downScale = requireNonNull(weights.ffnDownExpsScale)[l].get(expertIdx);
 
                     // gate_up = ffn_gate_up_exps[expert] @ moeInput -> (2*expertFF,)
                     int gateUpOffset = expertIdx * gateUpDim * dim;
-                    weights.ffnGateUpExps[l].matmul(state.moeInput, state.expertGateUp, gateUpDim, dim, gateUpOffset);
+                    requireNonNull(weights.ffnGateUpExps)[l].matmul(state.moeInput, requireNonNull(state.expertGateUp), gateUpDim, dim, gateUpOffset);
 
                     // gate = gelu(gate_up[0:expertFF]), up = gate_up[expertFF:2*expertFF]
                     state.expertGateUp.mapInPlace(0, expertFF, Llama::gelu);
@@ -273,7 +273,7 @@ public record Llama(LlamaConfiguration configuration, GemmaTokenizer tokenizer, 
 
                     // down = ffn_down_exps[expert] @ (gate * up) -> (dim,)
                     int downOffset = expertIdx * dim * expertFF;
-                    weights.ffnDownExps[l].matmul(state.expertGateUp, state.expertDown, dim, expertFF, downOffset);
+                    requireNonNull(weights.ffnDownExps)[l].matmul(state.expertGateUp, requireNonNull(state.expertDown), dim, expertFF, downOffset);
 
                     // Accumulate: moeOutput += prob * downScale * expertDown
                     float finalWeight = prob * downScale;
@@ -281,7 +281,7 @@ public record Llama(LlamaConfiguration configuration, GemmaTokenizer tokenizer, 
                 }
 
                 // Post-norm for MoE output
-                rmsnorm(state.moeOutput, state.moeOutput, weights.ffnPostNorm2[l], dim, config.rmsNormEps);
+                rmsnorm(state.moeOutput, state.moeOutput, requireNonNull(weights.ffnPostNorm2)[l], dim, config.rmsNormEps);
 
                 // Combine shared MLP + MoE: xb += moeOutput
                 state.xb.addInPlace(0, state.moeOutput, 0, dim);
@@ -303,14 +303,14 @@ public record Llama(LlamaConfiguration configuration, GemmaTokenizer tokenizer, 
 
             // Per-layer embedding: GELU-gated projection
             if (plDim > 0 && weights.perLayerInpGate != null) {
-                weights.perLayerInpGate[l].matmul(state.x, state.plGate, plDim, dim);
+                weights.perLayerInpGate[l].matmul(state.x, requireNonNull(state.plGate), plDim, dim);
                 state.plGate.mapInPlace(0, plDim, Llama::gelu);
                 int plOffset = l * plDim;
                 for (int i = 0; i < plDim; i++) {
-                    state.plGate.setFloat(i, state.plGate.getFloat(i) * state.perLayerInputs.getFloat(plOffset + i));
+                    state.plGate.setFloat(i, state.plGate.getFloat(i) * requireNonNull(state.perLayerInputs).getFloat(plOffset + i));
                 }
-                weights.perLayerProj[l].matmul(state.plGate, state.plProj, dim, plDim);
-                rmsnorm(state.plProj, state.plProj, weights.perLayerPostNorm[l], dim, config.rmsNormEps);
+                requireNonNull(weights.perLayerProj)[l].matmul(state.plGate, requireNonNull(state.plProj), dim, plDim);
+                rmsnorm(state.plProj, state.plProj, requireNonNull(weights.perLayerPostNorm)[l], dim, config.rmsNormEps);
                 state.x.addInPlace(state.plProj);
             }
 
@@ -334,8 +334,18 @@ public record Llama(LlamaConfiguration configuration, GemmaTokenizer tokenizer, 
     private static final String ANSI_CYAN = "\033[36m";
     private static final String ANSI_RESET = "\033[0m";
 
-    public static List<Integer> generateTokens(Llama model, LlamaState state, int startPosition, List<Integer> promptTokens, Set<Integer> stopTokens, int maxTokens, Sampler sampler, boolean echo,
-                                               boolean color, IntConsumer onTokenGenerated) {
+    public static List<Integer> generateTokens(
+            Llama model,
+            LlamaState state,
+            int startPosition,
+            List<Integer> promptTokens,
+            Set<Integer> stopTokens,
+            int maxTokens,
+            Sampler sampler,
+            boolean echo,
+            boolean color,
+            IntConsumer onTokenGenerated
+    ) {
         long startNanos = System.nanoTime();
         long startGen = 0;
         if (maxTokens < 0 || model.configuration().contextLength < maxTokens) {
@@ -361,9 +371,7 @@ public record Llama(LlamaConfiguration configuration, GemmaTokenizer tokenizer, 
                     System.err.print(GemmaTokenizer.replaceControlCharacters(model.tokenizer().decode(List.of(nextToken))));
                 }
                 generatedTokens.add(nextToken);
-                if (onTokenGenerated != null) {
-                    onTokenGenerated.accept(nextToken);
-                }
+                onTokenGenerated.accept(nextToken);
                 if (stopTokens.contains(nextToken)) {
                     break;
                 }

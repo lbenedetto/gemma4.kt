@@ -9,6 +9,8 @@ import jdk.incubator.vector.VectorSpecies;
 import java.lang.foreign.MemorySegment;
 import java.nio.ByteOrder;
 
+import static java.util.Objects.requireNonNull;
+
 final class BF16FloatTensor extends FloatTensor {
 
     final long size;
@@ -42,14 +44,14 @@ final class BF16FloatTensor extends FloatTensor {
     }
 
     private static float vectorDot(BF16FloatTensor thiz, int thisOffset, ArrayFloatTensor that, int thatOffset, int size) {
-        assert S_SPECIES_HALF.length() == F_SPECIES.length();
-        FloatVector val = FloatVector.zero(F_SPECIES);
+        assert requireNonNull(S_SPECIES_HALF).length() == requireNonNull(F_SPECIES).length();
+        FloatVector val = FloatVector.zero(requireNonNull(F_SPECIES));
         int upperBound = F_SPECIES.loopBound(size);
         for (int i = 0; i < upperBound; i += F_SPECIES.length()) {
             FloatVector thatVector = that.getFloatVector(F_SPECIES, thatOffset + i);
             ShortVector bfloat16 = ShortVector.fromMemorySegment(S_SPECIES_HALF, thiz.memorySegment, (thisOffset + i) * 2L, ByteOrder.LITTLE_ENDIAN);
             FloatVector thizVector = bfloat16
-                    .castShape(I_SPECIES, 0)
+                    .castShape(requireNonNull(I_SPECIES), 0)
                     .lanewise(VectorOperators.LSHL, 16)
                     .reinterpretAsFloats();
             val = thizVector.fma(thatVector, val);

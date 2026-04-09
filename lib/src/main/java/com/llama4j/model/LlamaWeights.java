@@ -1,6 +1,7 @@
 package com.llama4j.model;
 
 import com.llama4j.floattensor.FloatTensor;
+import org.jspecify.annotations.Nullable;
 
 import java.nio.FloatBuffer;
 
@@ -9,7 +10,7 @@ public final class LlamaWeights {
   public final FloatBuffer[] rms_att_weight;       // (layer, dim)
   public final FloatTensor[] wq;                   // (layer, queryDim, dim)
   public final FloatTensor[] wk;                   // (layer, kvDim, dim)
-  public final FloatTensor[] wv;                   // (layer, kvDim, dim) - null entry if V=K
+  public final @Nullable FloatTensor[] wv;                   // (layer, kvDim, dim) - null entry if V=K
   public final FloatTensor[] wo;                   // (layer, dim, queryDim)
   public final FloatBuffer[] attn_q_norm;          // (layer, headSize)
   public final FloatBuffer[] attn_k_norm;          // (layer, headSize)
@@ -29,44 +30,59 @@ public final class LlamaWeights {
   public final FloatBuffer freq_cis_imag_swa;
   public final FloatTensor wcls;
   // Per-layer embedding weights
-  public final FloatTensor perLayerTokenEmbd;
-  public final FloatTensor perLayerModelProj;
-  public final FloatBuffer perLayerProjNorm;
-  public final FloatTensor[] perLayerInpGate;
-  public final FloatTensor[] perLayerProj;
-  public final FloatBuffer[] perLayerPostNorm;
+  public final @Nullable FloatTensor perLayerTokenEmbd;
+  public final @Nullable FloatTensor perLayerModelProj;
+  public final @Nullable FloatBuffer perLayerProjNorm;
+  public final FloatTensor @Nullable [] perLayerInpGate;
+  public final FloatTensor @Nullable [] perLayerProj;
+  public final FloatBuffer @Nullable [] perLayerPostNorm;
   // MoE weights (null if dense model)
-  public final FloatTensor[] ffnGateInp;        // router weight (layer, n_experts, n_embd)
-  public final FloatBuffer[] ffnGateInpScale;   // router input scale (layer, n_embd)
-  public final FloatTensor[] ffnGateUpExps;     // fused gate+up expert (layer, n_experts * 2*expert_ff, n_embd)
-  public final FloatTensor[] ffnDownExps;       // down expert (layer, n_experts * n_embd, expert_ff)
-  public final FloatBuffer[] ffnDownExpsScale;  // expert output scale (layer, n_experts)
-  public final FloatBuffer[] ffnPostNorm1;      // shared MLP post norm (layer, dim) - MoE only
-  public final FloatBuffer[] preFfwNorm2;       // MoE pre-norm (layer, dim)
-  public final FloatBuffer[] ffnPostNorm2;      // MoE post norm (layer, dim)
+  public final @Nullable FloatTensor @Nullable [] ffnGateInp;        // router weight (layer, n_experts, n_embd)
+  public final FloatBuffer @Nullable [] ffnGateInpScale;   // router input scale (layer, n_embd)
+  public final FloatTensor @Nullable [] ffnGateUpExps;     // fused gate+up expert (layer, n_experts * 2*expert_ff, n_embd)
+  public final FloatTensor @Nullable [] ffnDownExps;       // down expert (layer, n_experts * n_embd, expert_ff)
+  public final FloatBuffer @Nullable [] ffnDownExpsScale;  // expert output scale (layer, n_experts)
+  public final FloatBuffer @Nullable [] ffnPostNorm1;      // shared MLP post norm (layer, dim) - MoE only
+  public final FloatBuffer @Nullable [] preFfwNorm2;       // MoE pre-norm (layer, dim)
+  public final FloatBuffer @Nullable [] ffnPostNorm2;      // MoE post norm (layer, dim)
 
-  public LlamaWeights(FloatTensor token_embedding_table,
-                      FloatBuffer[] rms_att_weight,
-                      FloatTensor[] wq, FloatTensor[] wk, FloatTensor[] wv, FloatTensor[] wo,
-                      FloatBuffer[] attn_q_norm, FloatBuffer[] attn_k_norm,
-                      FloatBuffer[] post_attention_norm,
-                      FloatBuffer[] rms_ffn_weight,
-                      FloatTensor[] w1, FloatTensor[] w2, FloatTensor[] w3,
-                      FloatBuffer[] post_ffw_norm,
-                      FloatBuffer rms_final_weight,
-                      float[] layerOutputScale,
-                      FloatBuffer freq_cis_real_full, FloatBuffer freq_cis_imag_full,
-                      FloatBuffer freq_cis_real_swa, FloatBuffer freq_cis_imag_swa,
-                      FloatTensor wcls,
-                      FloatTensor perLayerTokenEmbd, FloatTensor perLayerModelProj,
-                      FloatBuffer perLayerProjNorm,
-                      FloatTensor[] perLayerInpGate, FloatTensor[] perLayerProj,
-                      FloatBuffer[] perLayerPostNorm,
-                      FloatTensor[] ffnGateInp, FloatBuffer[] ffnGateInpScale,
-                      FloatTensor[] ffnGateUpExps, FloatTensor[] ffnDownExps,
-                      FloatBuffer[] ffnDownExpsScale,
-                      FloatBuffer[] ffnPostNorm1, FloatBuffer[] preFfwNorm2,
-                      FloatBuffer[] ffnPostNorm2) {
+  public LlamaWeights(
+          FloatTensor token_embedding_table,
+          FloatBuffer[] rms_att_weight,
+          FloatTensor[] wq,
+          FloatTensor[] wk,
+          @Nullable FloatTensor[] wv,
+          FloatTensor[] wo,
+          FloatBuffer[] attn_q_norm,
+          FloatBuffer[] attn_k_norm,
+          FloatBuffer[] post_attention_norm,
+          FloatBuffer[] rms_ffn_weight,
+          FloatTensor[] w1,
+          FloatTensor[] w2,
+          FloatTensor[] w3,
+          FloatBuffer[] post_ffw_norm,
+          FloatBuffer rms_final_weight,
+          float[] layerOutputScale,
+          FloatBuffer freq_cis_real_full,
+          FloatBuffer freq_cis_imag_full,
+          FloatBuffer freq_cis_real_swa,
+          FloatBuffer freq_cis_imag_swa,
+          FloatTensor wcls,
+          @Nullable FloatTensor perLayerTokenEmbd,
+          @Nullable FloatTensor perLayerModelProj,
+          @Nullable FloatBuffer perLayerProjNorm,
+          FloatTensor @Nullable [] perLayerInpGate,
+          FloatTensor @Nullable [] perLayerProj,
+          FloatBuffer @Nullable [] perLayerPostNorm,
+          FloatTensor @Nullable [] ffnGateInp,
+          FloatBuffer @Nullable [] ffnGateInpScale,
+          FloatTensor @Nullable [] ffnGateUpExps,
+          FloatTensor @Nullable [] ffnDownExps,
+          FloatBuffer @Nullable [] ffnDownExpsScale,
+          FloatBuffer @Nullable [] ffnPostNorm1,
+          FloatBuffer @Nullable [] preFfwNorm2,
+          FloatBuffer @Nullable [] ffnPostNorm2
+  ) {
     this.token_embedding_table = token_embedding_table;
     this.rms_att_weight = rms_att_weight;
     this.wq = wq;
