@@ -1,9 +1,9 @@
-package com.llama4j;
+package com.llama4j.gguf;
 
-import com.llama4j.gguf.GGMLTensorEntry;
-import com.llama4j.gguf.GGUF;
-import com.llama4j.gguf.ModelLoader;
+import com.llama4j.Options;
 import com.llama4j.model.Llama;
+import com.llama4j.model.LlamaConfiguration;
+import com.llama4j.model.LlamaWeights;
 import com.llama4j.model.RoPE;
 import com.llama4j.util.Pair;
 import com.llama4j.util.Timer;
@@ -17,10 +17,7 @@ import java.nio.file.StandardOpenOption;
 import java.util.Map;
 import java.util.Objects;
 
-final class AOT {
-    record PartialModel(String modelFileName, Llama model, long tensorDataOffset,
-                        Map<String, GGUF.GGUFTensorInfo> tensorInfos,
-                        Pair<float[], float[]> ropeFreqsSWA, Pair<float[], float[]> ropeFreqsFull) {}
+public final class AOT {
 
     private static final PartialModel PRELOADED_GGUF = preLoadGGUF(System.getProperty("gemma4.PreloadGGUF"));
 
@@ -35,9 +32,9 @@ final class AOT {
             }
             try (FileChannel fileChannel = FileChannel.open(path, StandardOpenOption.READ)) {
                 GGUF gguf = GGUF.loadModel(fileChannel, path.toString());
-                Llama base = ModelLoader.loadModel(null, gguf, Gemma4.DEFAULT_MAX_TOKENS, false);
+                Llama base = ModelLoader.loadModel(null, gguf, Options.DEFAULT_MAX_TOKENS, false);
                 // Precompute RoPE frequencies at build time (pure Java arrays, survives native-image)
-                Llama.Configuration config = base.configuration();
+                LlamaConfiguration config = base.configuration();
                 Pair<float[], float[]> ropeFreqsSWA = RoPE.precomputeFreqsCis(
                         config.contextLength, config.headSizeSWA, config.ropeThetaSWA);
                 // Read rope_freqs from model file
@@ -59,7 +56,7 @@ final class AOT {
     }
 
     public static Llama tryUsePreLoaded(Path modelPath, int contextLength) throws IOException {
-        AOT.PartialModel preLoaded = AOT.PRELOADED_GGUF;
+        PartialModel preLoaded = AOT.PRELOADED_GGUF;
         if (preLoaded == null) {
             return null;
         }
@@ -72,7 +69,7 @@ final class AOT {
         try (var timer = Timer.log("Load tensors from pre-loaded model");
              var fileChannel = FileChannel.open(modelPath, StandardOpenOption.READ)) {
             Map<String, GGMLTensorEntry> tensorEntries = GGUF.loadTensors(fileChannel, preLoaded.tensorDataOffset(), preLoaded.tensorInfos());
-            Llama.Weights weights = ModelLoader.loadWeightsWithRoPE(tensorEntries, baseModel.configuration(),
+            LlamaWeights weights = ModelLoader.loadWeightsWithRoPE(tensorEntries, baseModel.configuration(),
                     preLoaded.ropeFreqsSWA(), preLoaded.ropeFreqsFull());
             return new Llama(baseModel.configuration().withContextLength(contextLength), baseModel.tokenizer(), weights);
         }

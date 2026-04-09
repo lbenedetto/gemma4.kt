@@ -7,10 +7,7 @@ import com.llama4j.util.Timer;
 import java.io.IOException;
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 import java.nio.channels.FileChannel;
-import java.nio.channels.ReadableByteChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.HashMap;
@@ -43,99 +40,7 @@ public final class GGUF {
         return tensorInfos;
     }
 
-    private static final class ChannelReader {
-        private final ReadableByteChannel channel;
-        private final ByteBuffer buffer;
-        private long position;
 
-        private ChannelReader(ReadableByteChannel channel, int bufferSize) {
-            this.channel = channel;
-            this.buffer = ByteBuffer.allocateDirect(bufferSize).order(ByteOrder.LITTLE_ENDIAN);
-            this.buffer.limit(0);
-            this.position = 0L;
-        }
-
-        long position() {
-            return position;
-        }
-
-        private void ensure(int required) throws IOException {
-            if (required > buffer.capacity()) {
-                throw new IllegalArgumentException("Requested read " + required + " exceeds buffer capacity " + buffer.capacity());
-            }
-            if (buffer.remaining() >= required) {
-                return;
-            }
-            buffer.compact();
-            while (buffer.position() < required) {
-                int read = channel.read(buffer);
-                if (read < 0) {
-                    throw new IOException("Unexpected EOF while reading GGUF metadata");
-                }
-            }
-            buffer.flip();
-        }
-
-        byte readByte() throws IOException {
-            ensure(Byte.BYTES);
-            position += Byte.BYTES;
-            return buffer.get();
-        }
-
-        short readShort() throws IOException {
-            ensure(Short.BYTES);
-            position += Short.BYTES;
-            return buffer.getShort();
-        }
-
-        int readInt() throws IOException {
-            ensure(Integer.BYTES);
-            position += Integer.BYTES;
-            return buffer.getInt();
-        }
-
-        long readLong() throws IOException {
-            ensure(Long.BYTES);
-            position += Long.BYTES;
-            return buffer.getLong();
-        }
-
-        float readFloat() throws IOException {
-            return Float.intBitsToFloat(readInt());
-        }
-
-        double readDouble() throws IOException {
-            return Double.longBitsToDouble(readLong());
-        }
-
-        byte[] readBytes(int length) throws IOException {
-            byte[] bytes = new byte[length];
-            int copied = 0;
-            while (copied < length) {
-                if (!buffer.hasRemaining()) {
-                    ensure(1);
-                }
-                int chunk = Math.min(length - copied, buffer.remaining());
-                buffer.get(bytes, copied, chunk);
-                copied += chunk;
-                position += chunk;
-            }
-            return bytes;
-        }
-
-        void skipBytes(int length) throws IOException {
-            int remaining = length;
-            while (remaining > 0) {
-                if (!buffer.hasRemaining()) {
-                    ensure(1);
-                }
-                int chunk = Math.min(remaining, buffer.remaining());
-                buffer.position(buffer.position() + chunk);
-                remaining -= chunk;
-                position += chunk;
-            }
-        }
-    }
 
     public static Map<String, GGMLTensorEntry> loadTensors(FileChannel fileChannel, long tensorDataOffset, Map<String, GGUFTensorInfo> tensorInfos) throws IOException {
         Arena arena = Arena.global();
@@ -167,23 +72,13 @@ public final class GGUF {
         }
     }
 
-    enum MetadataValueType {
-        UINT8, INT8, UINT16, INT16, UINT32, INT32, FLOAT32, BOOL, STRING, ARRAY, UINT64, INT64, FLOAT64;
-
-        private static final MetadataValueType[] VALUES = values();
-
-        public static MetadataValueType fromIndex(int index) {
-            return VALUES[index];
-        }
-    }
-
     private void loadModelImpl(ChannelReader reader) throws IOException {
         readHeader(reader);
         this.tensorInfos = HashMap.newHashMap(tensorCount);
         for (int i = 0; i < tensorCount; ++i) {
-            GGUF.GGUFTensorInfo ti = readTensorInfo(reader);
-            assert !tensorInfos.containsKey(ti.name);
-            tensorInfos.put(ti.name, ti);
+            GGUFTensorInfo ti = readTensorInfo(reader);
+            assert !tensorInfos.containsKey(ti.name());
+            tensorInfos.put(ti.name(), ti);
         }
         long position = reader.position();
         int padding = (int) ((getAlignment() - (position % getAlignment())) % getAlignment());
@@ -191,15 +86,12 @@ public final class GGUF {
         this.tensorDataOffset = reader.position();
     }
 
-    public record GGUFTensorInfo(String name, int[] dimensions, GGMLType ggmlType, long offset) {
-    }
-
     private GGMLType readGGMLType(ChannelReader reader) throws IOException {
         int ggmlTypeId = readInt(reader);
         return GGMLType.fromId(ggmlTypeId);
     }
 
-    private GGUF.GGUFTensorInfo readTensorInfo(ChannelReader reader) throws IOException {
+    private GGUFTensorInfo readTensorInfo(ChannelReader reader) throws IOException {
         String name = readString(reader);
         assert name.length() <= 64;
         int n_dimensions = readInt(reader);
@@ -211,7 +103,7 @@ public final class GGUF {
         GGMLType ggmlType = readGGMLType(reader);
         long offset = readLong(reader);
         assert offset % getAlignment() == 0;
-        return new GGUF.GGUFTensorInfo(name, dimensions, ggmlType, offset);
+        return new GGUFTensorInfo(name, dimensions, ggmlType, offset);
     }
 
     private String readString(ChannelReader reader) throws IOException {

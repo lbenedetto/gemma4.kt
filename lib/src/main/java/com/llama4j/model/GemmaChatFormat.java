@@ -49,7 +49,7 @@ public class GemmaChatFormat {
         return tokens;
     }
 
-    public List<Integer> encodeHeader(GemmaChatFormat.Message message) {
+    public List<Integer> encodeHeader(Message message) {
         List<Integer> tokens = new ArrayList<>();
         tokens.add(startOfTurn);
         tokens.addAll(tokenizer.encode(message.role().toString()));
@@ -57,7 +57,7 @@ public class GemmaChatFormat {
         return tokens;
     }
 
-    public List<Integer> encodeMessage(GemmaChatFormat.Message message) {
+    public List<Integer> encodeMessage(Message message) {
         List<Integer> tokens = this.encodeHeader(message);
         tokens.addAll(this.tokenizer.encode(message.content().strip()));
         tokens.add(endOfTurn);
@@ -82,8 +82,7 @@ public class GemmaChatFormat {
         return tokens;
     }
 
-    public record Message(GemmaChatFormat.Role role, String content) {
-    }
+
 
     public List<Integer> encodeFillInTheMiddle(String prefix, String suffix) {
         List<Integer> tokens = new ArrayList<>();
@@ -95,14 +94,5 @@ public class GemmaChatFormat {
         return tokens;
     }
 
-    public record Role(String name) {
-        public static GemmaChatFormat.Role SYSTEM = new GemmaChatFormat.Role("system");
-        public static GemmaChatFormat.Role USER = new GemmaChatFormat.Role("user");
-        public static GemmaChatFormat.Role MODEL = new GemmaChatFormat.Role("model");
 
-        @Override
-        public String toString() {
-            return name;
-        }
-    }
 }

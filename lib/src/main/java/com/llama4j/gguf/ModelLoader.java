@@ -2,6 +2,8 @@ package com.llama4j.gguf;
 
 import com.llama4j.floattensor.*;
 import com.llama4j.model.Llama;
+import com.llama4j.model.LlamaConfiguration;
+import com.llama4j.model.LlamaWeights;
 import com.llama4j.model.RoPE;
 import com.llama4j.tokenizer.GemmaTokenizer;
 import com.llama4j.tokenizer.Vocabulary;
@@ -73,7 +75,7 @@ public final class ModelLoader {
             Arrays.fill(feedForwardLength, (int) ffnRaw);
         }
 
-        Map<String, GGUF.GGUFTensorInfo> tensorInfos = gguf.getTensorInfos();
+        Map<String, GGUFTensorInfo> tensorInfos = gguf.getTensorInfos();
 
         // Derive isSWA per layer from Q norm weight size (256 = SWA, 512 = full attention)
         boolean[] isSWA;
@@ -84,7 +86,7 @@ public final class ModelLoader {
             // Derive from tensor shapes: check Q norm size per layer
             isSWA = new boolean[numberOfLayers];
             for (int i = 0; i < numberOfLayers; i++) {
-                GGUF.GGUFTensorInfo qNorm = tensorInfos.get("blk." + i + ".attn_q_norm.weight");
+                GGUFTensorInfo qNorm = tensorInfos.get("blk." + i + ".attn_q_norm.weight");
                 if (qNorm != null) {
                     long qNormSize = FloatTensor.numberOfElementsLong(qNorm.dimensions());
                     isSWA[i] = (qNormSize == headSizeSWA);
@@ -97,7 +99,7 @@ public final class ModelLoader {
         // Derive per-layer KV head count from K weight shapes
         int[] numberOfKeyValueHeadsPerLayer = new int[numberOfLayers];
         for (int i = 0; i < numberOfLayers; i++) {
-            GGUF.GGUFTensorInfo kWeight = tensorInfos.get("blk." + i + ".attn_k.weight");
+            GGUFTensorInfo kWeight = tensorInfos.get("blk." + i + ".attn_k.weight");
             int headSize = isSWA[i] ? headSizeSWA : headSizeFull;
             if (kWeight != null) {
                 long kDim = kWeight.dimensions()[1];
@@ -113,7 +115,7 @@ public final class ModelLoader {
 
         int embeddingLengthPerLayer = (int) metadata.getOrDefault("gemma4.embedding_length_per_layer_input", 0);
 
-        Llama.Configuration config = new Llama.Configuration(
+        LlamaConfiguration config = new LlamaConfiguration(
                 embeddingLength,
                 feedForwardLength,
                 numberOfLayers,
@@ -141,11 +143,11 @@ public final class ModelLoader {
         }
 
         Map<String, GGMLTensorEntry> tensorEntries = GGUF.loadTensors(fileChannel, gguf.getTensorDataOffset(), tensorInfos);
-        Llama.Weights qw = loadWeights(tensorEntries, config);
+        LlamaWeights qw = loadWeights(tensorEntries, config);
         return new Llama(config, tokenizer, qw);
     }
 
-    public static Llama.Weights loadWeights(Map<String, GGMLTensorEntry> tensorEntries, Llama.Configuration config) {
+    public static LlamaWeights loadWeights(Map<String, GGMLTensorEntry> tensorEntries, LlamaConfiguration config) {
         Pair<float[], float[]> ropeFreqsSWA = RoPE.precomputeFreqsCis(config.contextLength, config.headSizeSWA, config.ropeThetaSWA);
         FloatBuffer ropeFreqsBuf = toFloatBuffer(tensorEntries.get("rope_freqs.weight"));
         float[] modelRopeFreqs = new float[ropeFreqsBuf.remaining()];
@@ -154,7 +156,7 @@ public final class ModelLoader {
         return loadWeightsWithRoPE(tensorEntries, config, ropeFreqsSWA, ropeFreqsFull);
     }
 
-    public static Llama.Weights loadWeightsWithRoPE(Map<String, GGMLTensorEntry> tensorEntries, Llama.Configuration config,
+    public static LlamaWeights loadWeightsWithRoPE(Map<String, GGMLTensorEntry> tensorEntries, LlamaConfiguration config,
                                                      Pair<float[], float[]> ropeFreqsSWA, Pair<float[], float[]> ropeFreqsFull) {
         int numberOfLayers = config.numberOfLayers;
 
@@ -216,7 +218,7 @@ public final class ModelLoader {
             ffnPostNorm2 = loadArrayOfFloatBuffer(numberOfLayers, i -> tensorEntries.get("blk." + i + ".post_ffw_norm_2.weight"));
         }
 
-        return new Llama.Weights(
+        return new LlamaWeights(
                 tokenEmbeddingTable,
                 loadArrayOfFloatBuffer(config.numberOfLayers, i -> tensorEntries.get("blk." + i + ".attn_norm.weight")),
                 loadArrayOfQuantized(config.numberOfLayers, i -> tensorEntries.get("blk." + i + ".attn_q.weight")),
