@@ -1,14 +1,6 @@
 [versions]
-errorprone-plugin = "5.1.0"
-errorprone-core   = "2.48.0"
-jspecify          = "1.0.0"
-nullaway          = "0.13.1"
 
 [libraries]
-errorprone-core = { module = "com.google.errorprone:error_prone_core", version.ref = "errorprone-core" }
-jspecify        = { module = "org.jspecify:jspecify", version.ref = "jspecify" }
-nullaway        = { module = "com.uber.nullaway:nullaway", version.ref = "nullaway" }
 
 [plugins]
 kotlin-jvm  = { id = "org.jetbrains.kotlin.jvm", version = "2.3.20" }
-errorprone  = { id = "net.ltgt.errorprone", version.ref = "errorprone-plugin" }

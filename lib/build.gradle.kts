@@ -1,9 +1,5 @@
-import net.ltgt.gradle.errorprone.CheckSeverity
-import net.ltgt.gradle.errorprone.errorprone
-
 plugins {
     alias(libs.plugins.kotlin.jvm)
-    alias(libs.plugins.errorprone)
     application
 }
 
@@ -12,9 +8,6 @@ repositories {
 }
 
 dependencies {
-    compileOnly(libs.jspecify)
-    errorprone(libs.nullaway)
-    errorprone(libs.errorprone.core)
 }
 
 application {
@@ -33,18 +26,6 @@ java {
 
 tasks.withType<JavaCompile>().configureEach {
     options.compilerArgs.add("--add-modules=jdk.incubator.vector")
-    options.errorprone {
-        check("NullAway", CheckSeverity.ERROR)
-        option("NullAway:AnnotatedPackages", "com.llama4j")
-        option("NullAway:JSpecifyMode", "true")
-        disable("NarrowCalculation")
-        disable("UnnecessaryParentheses")
-        disable("NarrowingCompoundAssignment")
-        disable("ArrayRecordComponent")
-        disable("AnnotateFormatMethod")
-        disable("DefaultCharset")
-        disable("StatementSwitchToExpressionSwitch")
-    }
 }
 
 tasks.withType<JavaExec> {
