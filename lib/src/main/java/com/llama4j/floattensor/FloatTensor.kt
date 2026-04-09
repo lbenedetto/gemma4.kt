@@ -168,7 +168,7 @@ abstract class FloatTensor {
     }
 
     fun readFloat16(memorySegment: MemorySegment, offset: Long): Float {
-      return Float.fromBits(readShort(memorySegment, offset).toInt() shl 16)
+      return java.lang.Float.float16ToFloat(readShort(memorySegment, offset))
     }
 
     fun readByte(memorySegment: MemorySegment, offset: Long): Byte {
