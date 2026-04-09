@@ -1,8 +1,8 @@
 package com.llama4j.gguf;
 
 import com.llama4j.floattensor.FloatTensor;
-import com.llama4j.util.Pair;
 import com.llama4j.util.Timer;
+import kotlin.Pair;
 
 import java.io.IOException;
 import java.lang.foreign.Arena;
@@ -138,8 +138,8 @@ public final class GGUF {
         this.metadata = HashMap.newHashMap(metadata_kv_count);
         for (int i = 0; i < metadata_kv_count; ++i) {
             Pair<String, Object> keyValue = readKeyValuePair(reader);
-            assert !metadata.containsKey(keyValue.first());
-            metadata.put(keyValue.first(), keyValue.second());
+            assert !metadata.containsKey(keyValue.getFirst());
+            metadata.put(keyValue.getFirst(), keyValue.getSecond());
         }
     }
 

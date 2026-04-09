@@ -1,7 +1,7 @@
 package com.llama4j.gguf;
 
 import com.llama4j.model.Llama;
-import com.llama4j.util.Pair;
+import kotlin.Pair;
 
 import java.util.Map;
 

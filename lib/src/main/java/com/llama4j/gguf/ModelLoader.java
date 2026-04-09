@@ -1,14 +1,15 @@
 package com.llama4j.gguf;
 
-import com.llama4j.floattensor.*;
+import com.llama4j.floattensor.FloatTensor;
+import com.llama4j.floattensor.FloatTensorFactory;
 import com.llama4j.model.Llama;
 import com.llama4j.model.LlamaConfiguration;
 import com.llama4j.model.LlamaWeights;
 import com.llama4j.model.RoPE;
 import com.llama4j.tokenizer.GemmaTokenizer;
 import com.llama4j.tokenizer.Vocabulary;
-import com.llama4j.util.Pair;
 import com.llama4j.util.Timer;
+import kotlin.Pair;
 
 import java.io.IOException;
 import java.nio.ByteOrder;
@@ -157,7 +158,7 @@ public final class ModelLoader {
     }
 
     public static LlamaWeights loadWeightsWithRoPE(Map<String, GGMLTensorEntry> tensorEntries, LlamaConfiguration config,
-                                                     Pair<float[], float[]> ropeFreqsSWA, Pair<float[], float[]> ropeFreqsFull) {
+                                                   Pair<float[], float[]> ropeFreqsSWA, Pair<float[], float[]> ropeFreqsFull) {
         int numberOfLayers = config.numberOfLayers;
 
         FloatTensor tokenEmbeddingTable = loadQuantized(tensorEntries.get("token_embd.weight"));
@@ -235,10 +236,10 @@ public final class ModelLoader {
                 loadArrayOfFloatBuffer(config.numberOfLayers, i -> tensorEntries.get("blk." + i + ".post_ffw_norm.weight")),
                 toFloatBuffer(tensorEntries.get("output_norm.weight")),
                 layerOutputScale,
-                FloatBuffer.wrap(ropeFreqsFull.first()),
-                FloatBuffer.wrap(ropeFreqsFull.second()),
-                FloatBuffer.wrap(ropeFreqsSWA.first()),
-                FloatBuffer.wrap(ropeFreqsSWA.second()),
+                FloatBuffer.wrap(ropeFreqsFull.getFirst()),
+                FloatBuffer.wrap(ropeFreqsFull.getSecond()),
+                FloatBuffer.wrap(ropeFreqsSWA.getFirst()),
+                FloatBuffer.wrap(ropeFreqsSWA.getSecond()),
                 tensorEntries.containsKey("output.weight")
                         ? loadQuantized(tensorEntries.get("output.weight"))
                         : tokenEmbeddingTable,

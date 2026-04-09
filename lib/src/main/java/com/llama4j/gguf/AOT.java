@@ -5,8 +5,8 @@ import com.llama4j.model.Llama;
 import com.llama4j.model.LlamaConfiguration;
 import com.llama4j.model.LlamaWeights;
 import com.llama4j.model.RoPE;
-import com.llama4j.util.Pair;
 import com.llama4j.util.Timer;
+import kotlin.Pair;
 
 import java.io.IOException;
 import java.nio.FloatBuffer;

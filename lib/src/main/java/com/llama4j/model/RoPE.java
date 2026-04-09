@@ -1,6 +1,6 @@
 package com.llama4j.model;
 
-import com.llama4j.util.Pair;
+import kotlin.Pair;
 
 public final class RoPE {
     public static Pair<float[], float[]> precomputeFreqsCis(int contextLength, int headSize, double theta) {
