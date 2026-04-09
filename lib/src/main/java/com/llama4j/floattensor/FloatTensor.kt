@@ -1,5 +1,7 @@
 package com.llama4j.floattensor
 
+import com.llama4j.gguf.GGMLType
+import com.llama4j.util.Parallel
 import jdk.incubator.vector.FloatVector
 import jdk.incubator.vector.VectorShape
 import jdk.incubator.vector.VectorSpecies
@@ -9,7 +11,7 @@ import java.util.*
 import kotlin.math.exp
 
 abstract class FloatTensor {
-  abstract fun size(): Long
+  abstract val size: Long
 
   abstract fun getFloat(index: Long): Float
 
@@ -17,19 +19,19 @@ abstract class FloatTensor {
 
   abstract fun getFloatVector(species: VectorSpecies<Float>, offset: Int): FloatVector?
 
-  abstract fun type(): com.llama4j.gguf.GGMLType?
+  abstract fun type(): GGMLType?
 
   open fun dot(thisOffset: Int, that: FloatTensor, thatOffset: Int, size: Int): Float {
     return scalarDot(this, thisOffset, that, thatOffset, size)
   }
 
   fun matmul(that: FloatTensor, out: FloatTensor, dim0: Int, dim1: Int) {
-    _root_ide_package_.com.llama4j.util.Parallel.parallelFor(0, dim0) { i: Int -> out.setFloat(i, dot(i * dim1, that, 0, dim1)) }
+    Parallel.parallelFor(0, dim0) { i: Int -> out.setFloat(i, dot(i * dim1, that, 0, dim1)) }
   }
 
   // matmul with offset into this tensor (for expert weight slicing in 3D tensors)
   fun matmul(that: FloatTensor, out: FloatTensor, dim0: Int, dim1: Int, thisOffset: Int) {
-    _root_ide_package_.com.llama4j.util.Parallel.parallelFor(0, dim0) { i: Int -> out.setFloat(i, dot(thisOffset + i * dim1, that, 0, dim1)) }
+    Parallel.parallelFor(0, dim0) { i: Int -> out.setFloat(i, dot(thisOffset + i * dim1, that, 0, dim1)) }
   }
 
   fun reduce(thisOffset: Int, size: Int, seed: Float, reduce: (Float, Float) -> Float): Float {
@@ -52,7 +54,7 @@ abstract class FloatTensor {
     that.mapWithIndexInPlace(
       thatOffset,
       size
-    ) { value: Float, index: Int -> this.getFloat((index - thatOffset + thisOffset).toLong()) }
+    ) { _, index -> this.getFloat((index - thatOffset + thisOffset).toLong()) }
   }
 
   fun argmax(thisOffset: Int, size: Int): Int {
@@ -71,25 +73,25 @@ abstract class FloatTensor {
   }
 
   fun argmax(): Int {
-    return argmax(0, Math.toIntExact(size()))
+    return argmax(0, Math.toIntExact(size))
   }
 
-  fun mapInPlace(thisOffset: Int, size: Int, mapFunction: MapFunction): FloatTensor {
+  fun mapInPlace(thisOffset: Int, size: Int, mapFunction: (Float) -> Float): FloatTensor {
     val endIndex = thisOffset + size
     for (i in thisOffset..<endIndex) {
-      setFloat(i, mapFunction.apply(getFloat(i.toLong())))
+      setFloat(i, mapFunction(getFloat(i.toLong())))
     }
     return this
   }
 
-  fun mapInPlace(mapFunction: MapFunction): FloatTensor {
-    return mapInPlace(0, Math.toIntExact(size()), mapFunction)
+  fun mapInPlace(mapFunction: (Float) -> Float): FloatTensor {
+    return mapInPlace(0, Math.toIntExact(size), mapFunction)
   }
 
-  fun mapWithIndexInPlace(thisOffset: Int, size: Int, mapWithIndexFunction: MapWithIndexFunction): FloatTensor {
+  fun mapWithIndexInPlace(thisOffset: Int, size: Int, mapWithIndexFunction: (Float, Int) -> Float): FloatTensor {
     val endOffset = thisOffset + size
     for (i in thisOffset..<endOffset) {
-      setFloat(i, mapWithIndexFunction.apply(getFloat(i.toLong()), i))
+      setFloat(i, mapWithIndexFunction(getFloat(i.toLong()), i))
     }
     return this
   }
@@ -98,31 +100,31 @@ abstract class FloatTensor {
     return mapWithIndexInPlace(
       thisOffset,
       size
-    ) { value: Float, index: Int -> value + that.getFloat((index - thisOffset + thatOffset).toLong()) }
+    ) { value, index -> value + that.getFloat((index - thisOffset + thatOffset).toLong()) }
   }
 
   fun addInPlace(that: FloatTensor): FloatTensor {
-    return addInPlace(0, that, 0, Math.toIntExact(size()))
+    return addInPlace(0, that, 0, Math.toIntExact(size))
   }
 
   fun multiplyInPlace(thisOffset: Int, that: FloatTensor, thatOffset: Int, size: Int): FloatTensor {
     return mapWithIndexInPlace(
       thisOffset,
       size
-    ) { value: Float, index: Int -> value * that.getFloat((index - thisOffset + thatOffset).toLong()) }
+    ) { value, index -> value * that.getFloat((index - thisOffset + thatOffset).toLong()) }
   }
 
   fun divideInPlace(thisOffset: Int, size: Int, value: Float): FloatTensor {
-    return mapInPlace(thisOffset, size) { f: Float -> f / value }
+    return mapInPlace(thisOffset, size) { it / value }
   }
 
   open fun fillInPlace(thisOffset: Int, size: Int, value: Float): FloatTensor {
-    return mapInPlace(thisOffset, size) { `_`: Float -> value }
+    return mapInPlace(thisOffset, size) { value }
   }
 
   fun softmaxInPlace(thisOffset: Int, size: Int): FloatTensor {
     val maxVal = max(thisOffset, size)
-    mapInPlace(thisOffset, size) { f: Float -> exp((f - maxVal).toDouble()).toFloat() }
+    mapInPlace(thisOffset, size) { exp((it - maxVal).toDouble()).toFloat() }
     val sum = sum(thisOffset, size)
     return divideInPlace(thisOffset, size, sum)
   }

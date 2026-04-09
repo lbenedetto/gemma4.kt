@@ -10,13 +10,9 @@ import java.nio.ByteOrder
 import kotlin.math.min
 
 internal class Q8_0FloatTensor(
-  val size: Long,
+  override val size: Long,
   val memorySegment: MemorySegment
 ) : FloatTensor() {
-
-  override fun size(): Long {
-    return size
-  }
 
   override fun setFloat(index: Int, value: Float) {
     throw UnsupportedOperationException("setFloat")
@@ -40,10 +36,10 @@ internal class Q8_0FloatTensor(
   }
 
   override fun dot(thisOffset: Int, that: FloatTensor, thatOffset: Int, size: Int): Float {
-    if (USE_VECTOR_API) {
-      return vectorDot(this, thisOffset, that as ArrayFloatTensor, thatOffset, size)
+    return if (USE_VECTOR_API) {
+      vectorDot(this, thisOffset, that as ArrayFloatTensor, thatOffset, size)
     } else {
-      return scalarDot(this, thisOffset, that, thatOffset, size)
+      scalarDot(this, thisOffset, that, thatOffset, size)
     }
   }
 

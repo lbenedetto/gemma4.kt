@@ -10,18 +10,10 @@ import java.lang.foreign.MemorySegment
 import java.nio.ByteOrder
 import kotlin.math.min
 
-internal class Q6_KFloatTensor(size: Long, memorySegment: MemorySegment) : FloatTensor() {
-  val size: Long
+internal class Q6_KFloatTensor(
+  override val size: Long,
   val memorySegment: MemorySegment
-
-  init {
-    this.size = size
-    this.memorySegment = memorySegment
-  }
-
-  override fun size(): Long {
-    return size
-  }
+) : FloatTensor() {
 
   override fun setFloat(index: Int, value: Float) {
     throw UnsupportedOperationException("setFloat")
@@ -41,7 +33,6 @@ internal class Q6_KFloatTensor(size: Long, memorySegment: MemorySegment) : Float
     val blockIndex: Long = index / BLOCK_SIZE
     val withinBlock = (index % BLOCK_SIZE).toInt()
     val blockOffset: Long = blockIndex * TYPE_SIZE
-    val qlOff = blockOffset
     val qhOff = blockOffset + 128
     val scOff = blockOffset + 192
     val d: Float = readFloat16(memorySegment, blockOffset + 208)
@@ -51,7 +42,7 @@ internal class Q6_KFloatTensor(size: Long, memorySegment: MemorySegment) : Float
     val sub32 = rem128 / 32
     val l = rem128 % 32
 
-    val qlBase = qlOff + half * 64
+    val qlBase = blockOffset + half * 64
     val qhBase = qhOff + half * 32
 
     val qlNibble: Int
@@ -88,10 +79,10 @@ internal class Q6_KFloatTensor(size: Long, memorySegment: MemorySegment) : Float
   }
 
   override fun dot(thisOffset: Int, that: FloatTensor, thatOffset: Int, size: Int): Float {
-    if (USE_VECTOR_API) {
-      return vectorDot(this, thisOffset, that as ArrayFloatTensor, thatOffset, size)
+    return if (USE_VECTOR_API) {
+      vectorDot(this, thisOffset, that as ArrayFloatTensor, thatOffset, size)
     } else {
-      return scalarDot(this, thisOffset, that, thatOffset, size)
+      scalarDot(this, thisOffset, that, thatOffset, size)
     }
   }
 

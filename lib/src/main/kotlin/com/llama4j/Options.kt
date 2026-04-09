@@ -98,7 +98,7 @@ data class Options(
           "--instruct" -> interactive = false
           "--help", "-h" -> {
             printUsage(System.out)
-            System.exit(0)
+            exitProcess(0)
           }
 
           else -> {

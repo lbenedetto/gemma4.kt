@@ -11,13 +11,9 @@ import java.nio.ByteOrder
 import kotlin.math.min
 
 internal class MXFP4FloatTensor(
-  private val size: Long,
+  override val size: Long,
   private val memorySegment: MemorySegment
 ) : FloatTensor() {
-
-  override fun size(): Long {
-    return size
-  }
 
   override fun setFloat(index: Int, value: Float) {
     throw UnsupportedOperationException("setFloat")
@@ -27,15 +23,15 @@ internal class MXFP4FloatTensor(
     throw UnsupportedOperationException("getFloatVector")
   }
 
-  override fun type(): com.llama4j.gguf.GGMLType {
-    return _root_ide_package_.com.llama4j.gguf.GGMLType.MXFP4
+  override fun type(): GGMLType {
+    return GGMLType.MXFP4
   }
 
   override fun getFloat(index: Long): Float {
     assert(index in 0..<size)
-    val blockIndex: Long = index / _root_ide_package_.com.llama4j.gguf.QK_MXFP4
-    val inBlockIndex = (index % _root_ide_package_.com.llama4j.gguf.QK_MXFP4).toInt()
-    val blockOffset = blockIndex * _root_ide_package_.com.llama4j.gguf.GGMLType.MXFP4.typeSize
+    val blockIndex: Long = index / QK_MXFP4
+    val inBlockIndex = (index % QK_MXFP4).toInt()
+    val blockOffset = blockIndex * GGMLType.MXFP4.typeSize
 
     val e8m0 = readByte(memorySegment, blockOffset).toUnsignedInt()
     val d: Float = e8m0ToFp32Half(e8m0)

@@ -38,7 +38,7 @@ object ModelLoader {
   @Throws(IOException::class)
   fun loadModel(fileChannel: FileChannel?, gguf: GGUF, contextLength: Int, loadWeightsFlag: Boolean): Llama {
     var contextLength = contextLength
-    val metadata = gguf.getMetadata()
+    val metadata = gguf.metadata
 
     val vocabulary = loadVocabulary(metadata)
     val tokenizer = createTokenizer(metadata, vocabulary)
@@ -67,7 +67,7 @@ object ModelLoader {
 
     // Per-layer feed forward lengths (scalar for uniform, array for variable)
     val feedForwardLength: IntArray
-    val ffnRaw = metadata.get("gemma4.feed_forward_length")
+    val ffnRaw = metadata["gemma4.feed_forward_length"]
     if (ffnRaw is IntArray) {
       feedForwardLength = ffnRaw
     } else {
@@ -75,18 +75,18 @@ object ModelLoader {
       Arrays.fill(feedForwardLength, ffnRaw!! as Int)
     }
 
-    val tensorInfos = gguf.getTensorInfos()
+    val tensorInfos = gguf.tensorInfos
 
     // Derive isSWA per layer from Q norm weight size (256 = SWA, 512 = full attention)
     val isSWA: BooleanArray
-    val swaRaw = metadata.get("gemma4.attention.sliding_window_pattern")
+    val swaRaw = metadata["gemma4.attention.sliding_window_pattern"]
     if (swaRaw is BooleanArray) {
       isSWA = swaRaw
     } else {
       // Derive from tensor shapes: check Q norm size per layer
       isSWA = BooleanArray(numberOfLayers)
       for (i in 0..<numberOfLayers) {
-        val qNorm = tensorInfos.get("blk." + i + ".attn_q_norm.weight")
+        val qNorm = tensorInfos["blk.$i.attn_q_norm.weight"]
         if (qNorm != null) {
           val qNormSize: Long = FloatTensor.numberOfElementsLong(*qNorm.dimensions)
           isSWA[i] = (qNormSize == headSizeSWA.toLong())
@@ -99,7 +99,7 @@ object ModelLoader {
     // Derive per-layer KV head count from K weight shapes
     val numberOfKeyValueHeadsPerLayer = IntArray(numberOfLayers)
     for (i in 0..<numberOfLayers) {
-      val kWeight = tensorInfos.get("blk." + i + ".attn_k.weight")
+      val kWeight = tensorInfos["blk.$i.attn_k.weight"]
       val headSize = if (isSWA[i]) headSizeSWA else headSizeFull
       if (kWeight != null) {
         val kDim = kWeight.dimensions[1].toLong()

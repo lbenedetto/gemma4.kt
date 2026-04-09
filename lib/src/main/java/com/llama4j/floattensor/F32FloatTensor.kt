@@ -1,5 +1,6 @@
 package com.llama4j.floattensor
 
+import com.llama4j.gguf.GGMLType
 import jdk.incubator.vector.FloatVector
 import jdk.incubator.vector.VectorOperators
 import jdk.incubator.vector.VectorSpecies
@@ -7,18 +8,10 @@ import java.lang.foreign.MemorySegment
 import java.lang.foreign.ValueLayout
 import java.nio.ByteOrder
 
-internal class F32FloatTensor(numElements: Long, memorySegment: MemorySegment) : FloatTensor() {
-  private val size: Long
+internal class F32FloatTensor(
+  override val size: Long,
   private val memorySegment: MemorySegment
-
-  init {
-    this.size = numElements
-    this.memorySegment = memorySegment
-  }
-
-  override fun size(): Long {
-    return size
-  }
+) : FloatTensor() {
 
   override fun getFloat(index: Long): Float {
     return memorySegment.get(ValueLayout.JAVA_FLOAT_UNALIGNED, index * Float.SIZE_BYTES)
@@ -28,11 +21,11 @@ internal class F32FloatTensor(numElements: Long, memorySegment: MemorySegment) :
     throw UnsupportedOperationException("read-only")
   }
 
-  override fun type(): com.llama4j.gguf.GGMLType {
-    return _root_ide_package_.com.llama4j.gguf.GGMLType.F32
+  override fun type(): GGMLType {
+    return GGMLType.F32
   }
 
-  public override fun getFloatVector(species: VectorSpecies<Float>, offset: Int): FloatVector {
+  override fun getFloatVector(species: VectorSpecies<Float>, offset: Int): FloatVector {
     if (!USE_VECTOR_API) {
       throw UnsupportedOperationException()
     }

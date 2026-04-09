@@ -7,7 +7,7 @@ import java.util.stream.IntStream
 class LlamaState internal constructor(config: LlamaConfiguration) {
   val x: FloatTensor // activation at current time stamp (embeddingLength,)
   val xb: FloatTensor // same, but inside a residual branch (embeddingLength,)
-  val xb_k: FloatTensor // attention output before wo projection (max queryDim,)
+  val xbK: FloatTensor // attention output before wo projection (max queryDim,)
   val xb2: FloatTensor // an additional buffer (embeddingLength,)
   val hb: FloatTensor // buffer for hidden dimension in the ffn (maxHiddenDim,)
   val hb2: FloatTensor // buffer for hidden dimension in the ffn (maxHiddenDim,)
@@ -43,7 +43,7 @@ class LlamaState internal constructor(config: LlamaConfiguration) {
     val maxHiddenDim = config.maxHiddenDim()
     this.x = ArrayFloatTensor.allocate(config.embeddingLength)
     this.xb = ArrayFloatTensor.allocate(config.embeddingLength)
-    this.xb_k = ArrayFloatTensor.allocate(maxQueryDim)
+    this.xbK = ArrayFloatTensor.allocate(maxQueryDim)
     this.xb2 = ArrayFloatTensor.allocate(config.embeddingLength)
     this.hb = ArrayFloatTensor.allocate(maxHiddenDim)
     this.hb2 = ArrayFloatTensor.allocate(maxHiddenDim)

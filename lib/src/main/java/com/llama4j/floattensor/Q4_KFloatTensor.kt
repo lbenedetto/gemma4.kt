@@ -11,13 +11,9 @@ import java.nio.ByteOrder
 import kotlin.math.min
 
 internal class Q4_KFloatTensor(
-  val size: Long,
+  override val size: Long,
   val memorySegment: MemorySegment
 ) : FloatTensor() {
-
-  override fun size(): Long {
-    return size
-  }
 
   override fun setFloat(index: Int, value: Float) {
     throw UnsupportedOperationException("setFloat")
@@ -74,7 +70,7 @@ internal class Q4_KFloatTensor(
   }
 
   companion object {
-    val BLOCK_SIZE: Int = QK_K
+    const val BLOCK_SIZE: Int = QK_K
     val TYPE_SIZE: Int = GGMLType.Q4_K.typeSize
 
     // Decode scale or min for sub-block j (0..7) from the 12-byte scales array

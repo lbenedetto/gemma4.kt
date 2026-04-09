@@ -7,18 +7,10 @@ import jdk.incubator.vector.VectorSpecies
 import java.lang.foreign.MemorySegment
 import kotlin.math.min
 
-internal class Q5_1FloatTensor(size: Long, memorySegment: MemorySegment) : FloatTensor() {
-  private val size: Long
+internal class Q5_1FloatTensor(
+  override val size: Long,
   private val memorySegment: MemorySegment
-
-  init {
-    this.size = size
-    this.memorySegment = memorySegment
-  }
-
-  override fun size(): Long {
-    return size
-  }
+) : FloatTensor() {
 
   override fun setFloat(index: Int, value: Float) {
     throw UnsupportedOperationException("setFloat")

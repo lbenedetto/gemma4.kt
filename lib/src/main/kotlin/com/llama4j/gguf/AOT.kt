@@ -16,7 +16,7 @@ object AOT {
 
   @Contract("null -> null")
   private fun preLoadGGUF(modelPath: String?): PartialModel? {
-    if (modelPath == null || modelPath.isEmpty()) {
+    if (modelPath.isNullOrEmpty()) {
       return null
     }
     try {
@@ -33,7 +33,7 @@ object AOT {
         // Read rope_freqs from model file
         val ropeFreqsFull: Pair<FloatArray, FloatArray>?
         val tmpEntries: MutableMap<String, GGMLTensorEntry> =
-          GGUF.loadTensors(fileChannel, gguf.tensorDataOffset, gguf.getTensorInfos())
+          GGUF.loadTensors(fileChannel, gguf.tensorDataOffset, gguf.tensorInfos)
         val ropeFreqsBuf =
           ModelLoader.toFloatBuffer(tmpEntries["rope_freqs.weight"]!!)
         val modelRopeFreqs = FloatArray(ropeFreqsBuf.remaining())
@@ -42,8 +42,8 @@ object AOT {
           config.contextLength, config.headSizeFull, config.ropeTheta.toDouble(), modelRopeFreqs
         )
         return PartialModel(
-          path.getFileName().toString(), base,
-          gguf.tensorDataOffset, gguf.getTensorInfos(),
+          path.fileName.toString(), base,
+          gguf.tensorDataOffset, gguf.tensorInfos,
           ropeFreqsSWA, ropeFreqsFull
         )
       }

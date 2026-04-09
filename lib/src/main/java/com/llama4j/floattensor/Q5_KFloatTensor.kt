@@ -10,18 +10,10 @@ import java.lang.foreign.MemorySegment
 import java.nio.ByteOrder
 import kotlin.math.min
 
-internal class Q5_KFloatTensor(size: Long, memorySegment: MemorySegment) : FloatTensor() {
-  val size: Long
+internal class Q5_KFloatTensor(
+  override val size: Long,
   val memorySegment: MemorySegment
-
-  init {
-    this.size = size
-    this.memorySegment = memorySegment
-  }
-
-  override fun size(): Long {
-    return size
-  }
+) : FloatTensor() {
 
   override fun setFloat(index: Int, value: Float) {
     throw UnsupportedOperationException("setFloat")
@@ -65,10 +57,10 @@ internal class Q5_KFloatTensor(size: Long, memorySegment: MemorySegment) : Float
   }
 
   override fun dot(thisOffset: Int, that: FloatTensor, thatOffset: Int, size: Int): Float {
-    if (USE_VECTOR_API) {
-      return vectorDot(this, thisOffset, that as ArrayFloatTensor, thatOffset, size)
+    return if (USE_VECTOR_API) {
+      vectorDot(this, thisOffset, that as ArrayFloatTensor, thatOffset, size)
     } else {
-      return scalarDot(this, thisOffset, that, thatOffset, size)
+      scalarDot(this, thisOffset, that, thatOffset, size)
     }
   }
 

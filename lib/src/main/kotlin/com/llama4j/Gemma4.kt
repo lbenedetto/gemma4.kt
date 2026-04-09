@@ -37,14 +37,13 @@ object Gemma4 {
       sampler = Sampler.ARGMAX
     } else {
       val rng = RandomGeneratorFactory.getDefault().create(rngSeed)
-      val innerSampler: Sampler?
-      if (topp <= 0 || topp >= 1) {
-        innerSampler = CategoricalSampler(rng)
+      val innerSampler = if (topp <= 0 || topp >= 1) {
+        CategoricalSampler(rng)
       } else {
-        innerSampler = ToppSampler(vocabularySize, topp, rng)
+        ToppSampler(vocabularySize, topp, rng)
       }
       sampler = Sampler { logits: FloatTensor? ->
-        val logitsSize = Math.toIntExact(logits!!.size())
+        val logitsSize = Math.toIntExact(logits!!.size)
         logits.divideInPlace(0, logitsSize, temperature)
         logits.softmaxInPlace(0, logitsSize)
         innerSampler.sampleToken(logits)
@@ -150,8 +149,8 @@ object Gemma4 {
   }
 
   private fun stripThoughtChannelTokens(tokenizer: GemmaTokenizer, tokens: MutableList<Int>): MutableList<Int> {
-    val channelOpen = tokenizer.specialTokens.get("<|channel>")
-    val channelClose = tokenizer.specialTokens.get("<channel|>")
+    val channelOpen = tokenizer.specialTokens["<|channel>"]
+    val channelClose = tokenizer.specialTokens["<channel|>"]
     if (channelOpen == null || channelClose == null || tokens.isEmpty()) {
       return tokens
     }

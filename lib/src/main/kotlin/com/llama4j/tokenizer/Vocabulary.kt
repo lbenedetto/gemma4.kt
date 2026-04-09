@@ -22,7 +22,7 @@ data class Vocabulary(
   }
 
   fun getIndex(token: String): OptionalInt {
-    val value = tokenToIndex.get(token)
+    val value = tokenToIndex[token]
     return if (value != null) OptionalInt.of(value) else OptionalInt.empty()
   }
 

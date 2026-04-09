@@ -10,13 +10,9 @@ import java.nio.ByteOrder
 import kotlin.math.min
 
 internal class Q4_0FloatTensor(
-  val size: Long,
+  override val size: Long,
   val memorySegment: MemorySegment
 ) : FloatTensor() {
-
-  override fun size(): Long {
-    return size
-  }
 
   override fun setFloat(index: Int, value: Float) {
     throw UnsupportedOperationException("setFloat")
@@ -37,11 +33,11 @@ internal class Q4_0FloatTensor(
     val scale: Float = readFloat16(memorySegment, blockOffset)
     var quant: Byte
     val modIndex = (index % GGMLType.Q4_0.blockSize).toInt()
-    if (modIndex < GGMLType.Q4_0.blockSize / 2) {
-      quant = (readByte(memorySegment, blockOffset + Float16.BYTES + modIndex)
+    quant = if (modIndex < GGMLType.Q4_0.blockSize / 2) {
+      (readByte(memorySegment, blockOffset + Float16.BYTES + modIndex)
         .toInt() and 0x0F).toByte()
     } else {
-      quant = ((readByte(
+      ((readByte(
         memorySegment,
         blockOffset + Float16.BYTES + modIndex - GGMLType.Q4_0.blockSize / 2
       ).toInt() ushr 4) and 0x0F).toByte()
@@ -51,10 +47,10 @@ internal class Q4_0FloatTensor(
   }
 
   override fun dot(thisOffset: Int, that: FloatTensor, thatOffset: Int, size: Int): Float {
-    if (USE_VECTOR_API) {
-      return vectorDot(this, thisOffset, that as ArrayFloatTensor, thatOffset, size)
+    return if (USE_VECTOR_API) {
+      vectorDot(this, thisOffset, that as ArrayFloatTensor, thatOffset, size)
     } else {
-      return scalarDot(this, thisOffset, that, thatOffset, size)
+      scalarDot(this, thisOffset, that, thatOffset, size)
     }
   }
 

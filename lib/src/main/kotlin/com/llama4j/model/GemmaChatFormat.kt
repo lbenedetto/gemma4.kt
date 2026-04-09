@@ -27,7 +27,7 @@ class GemmaChatFormat(private val tokenizer: GemmaTokenizer) {
 
   val stopTokens: MutableSet<Int>
     get() {
-      val tokens: MutableSet<Int> = HashSet<Int>()
+      val tokens: MutableSet<Int> = HashSet()
       tokens.add(endOfSentence)
       tokens.add(endOfTurn)
       if (fimSuffix != -1) {
@@ -46,7 +46,7 @@ class GemmaChatFormat(private val tokenizer: GemmaTokenizer) {
     }
 
   fun encodeHeader(message: Message): MutableList<Int> {
-    val tokens: MutableList<Int> = ArrayList<Int>()
+    val tokens: MutableList<Int> = ArrayList()
     tokens.add(startOfTurn)
     tokens.addAll(tokenizer.encode(message.role.toString()))
     tokens.addAll(this.tokenizer.encode("\n"))
@@ -64,12 +64,12 @@ class GemmaChatFormat(private val tokenizer: GemmaTokenizer) {
   fun encodeSystemThinkingTurn(systemPrompt: String?): MutableList<Int> {
     // Matches Gemma4 template with enable_thinking=true:
     // <|turn>system\n<|think|>[system_content]<turn|>\n
-    val tokens: MutableList<Int> = ArrayList<Int>(encodeHeader(Message(Role.SYSTEM, "")))
-    val thinkToken = tokenizer.specialTokens.get("<|think|>")
+    val tokens: MutableList<Int> = ArrayList(encodeHeader(Message(Role.SYSTEM, "")))
+    val thinkToken = tokenizer.specialTokens["<|think|>"]
     if (thinkToken != null) {
       tokens.add(thinkToken)
     }
-    if (systemPrompt != null && !systemPrompt.isEmpty()) {
+    if (!systemPrompt.isNullOrEmpty()) {
       tokens.addAll(tokenizer.encode(systemPrompt.trim { it <= ' ' }))
     }
     tokens.add(endOfTurn)
@@ -79,7 +79,7 @@ class GemmaChatFormat(private val tokenizer: GemmaTokenizer) {
 
 
   fun encodeFillInTheMiddle(prefix: String, suffix: String): MutableList<Int> {
-    val tokens: MutableList<Int> = ArrayList<Int>()
+    val tokens: MutableList<Int> = ArrayList()
     tokens.add(this.fimPrefix)
     tokens.addAll(tokenizer.encode(prefix))
     tokens.add(this.fimSuffix)

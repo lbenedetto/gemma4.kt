@@ -1,5 +1,6 @@
 package com.llama4j.floattensor
 
+import com.llama4j.gguf.GGMLType
 import jdk.incubator.vector.FloatVector
 import jdk.incubator.vector.ShortVector
 import jdk.incubator.vector.VectorOperators
@@ -7,18 +8,10 @@ import jdk.incubator.vector.VectorSpecies
 import java.lang.foreign.MemorySegment
 import java.nio.ByteOrder
 
-internal class F16FloatTensor(size: Long, memorySegment: MemorySegment) : FloatTensor() {
-  val size: Long
+internal class F16FloatTensor(
+  override val size: Long,
   val memorySegment: MemorySegment
-
-  init {
-    this.size = size
-    this.memorySegment = memorySegment
-  }
-
-  override fun size(): Long {
-    return size
-  }
+) : FloatTensor() {
 
   override fun setFloat(index: Int, value: Float) {
     throw UnsupportedOperationException("setFloat")
@@ -28,8 +21,8 @@ internal class F16FloatTensor(size: Long, memorySegment: MemorySegment) : FloatT
     throw UnsupportedOperationException("getFloatVector")
   }
 
-  override fun type(): com.llama4j.gguf.GGMLType {
-    return _root_ide_package_.com.llama4j.gguf.GGMLType.F16
+  override fun type(): GGMLType {
+    return GGMLType.F16
   }
 
   override fun getFloat(index: Long): Float {
@@ -38,10 +31,10 @@ internal class F16FloatTensor(size: Long, memorySegment: MemorySegment) : FloatT
   }
 
   override fun dot(thisOffset: Int, that: FloatTensor, thatOffset: Int, size: Int): Float {
-    if (USE_VECTOR_API) {
-      return vectorDot(this, thisOffset, that as ArrayFloatTensor, thatOffset, size)
+    return if (USE_VECTOR_API) {
+      vectorDot(this, thisOffset, that as ArrayFloatTensor, thatOffset, size)
     } else {
-      return scalarDot(this, thisOffset, that, thatOffset, size)
+      scalarDot(this, thisOffset, that, thatOffset, size)
     }
   }
 

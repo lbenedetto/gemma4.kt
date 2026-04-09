@@ -1,5 +1,6 @@
 package com.llama4j.floattensor
 
+import com.llama4j.gguf.GGMLType
 import jdk.incubator.vector.FloatVector
 import jdk.incubator.vector.VectorOperators
 import jdk.incubator.vector.VectorSpecies
@@ -7,7 +8,7 @@ import java.nio.FloatBuffer
 import java.util.*
 
 class ArrayFloatTensor : FloatTensor {
-  val size: Long
+  override val size: Long
   val values: FloatArray
 
   internal constructor(values: FloatArray) {
@@ -22,10 +23,6 @@ class ArrayFloatTensor : FloatTensor {
     buf.rewind()
   }
 
-  override fun size(): Long {
-    return size
-  }
-
   override fun getFloat(index: Long): Float {
     return values[Math.toIntExact(index)]
   }
@@ -34,8 +31,8 @@ class ArrayFloatTensor : FloatTensor {
     values[index] = value
   }
 
-  override fun type(): com.llama4j.gguf.GGMLType {
-    return _root_ide_package_.com.llama4j.gguf.GGMLType.F32
+  override fun type(): GGMLType {
+    return GGMLType.F32
   }
 
   override fun fillInPlace(thisOffset: Int, size: Int, value: Float): FloatTensor {

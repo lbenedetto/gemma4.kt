@@ -58,7 +58,7 @@ class GemmaTokenizer(
             var bestIdx = -1
 
             for (i in 0..<tokens.size - 1) {
-                val strBuffer = vocabulary.get(tokens[i]) + vocabulary.get(tokens[i + 1])
+                val strBuffer = vocabulary[tokens[i]] + vocabulary[tokens[i + 1]]
                 val id = vocabulary.getIndex(strBuffer).orElse(-1)
                 if (id != -1 && vocabulary.getScore(id) > bestScore) {
                     bestScore = vocabulary.getScore(id)
@@ -81,7 +81,7 @@ class GemmaTokenizer(
     fun decode(tokens: List<Int>): String {
         val sb = StringBuilder()
         for (token in tokens) {
-            var tokenString = vocabulary.get(token)
+            var tokenString = vocabulary[token]
             if (isSpecialToken(token)) {
                 val prefix = "<0x"
                 val suffix = ">"

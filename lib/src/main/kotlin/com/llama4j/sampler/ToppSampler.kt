@@ -7,7 +7,7 @@ class ToppSampler(maxNumberOfElements: Int, val topp: Float, val rng: RandomGene
   val indices: IntArray = IntArray(maxNumberOfElements)
 
   override fun sampleToken(logits: FloatTensor): Int {
-    val n = Math.toIntExact(logits.size())
+    val n = Math.toIntExact(logits.size)
     var head = 0
     var tail = n - 1
     val cutoff = (1.0f - topp) / (n - 1)

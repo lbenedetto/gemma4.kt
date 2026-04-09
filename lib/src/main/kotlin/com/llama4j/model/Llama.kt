@@ -6,7 +6,6 @@ import com.llama4j.tokenizer.GemmaTokenizer
 import com.llama4j.tokenizer.GemmaTokenizer.Companion.replaceControlCharacters
 import com.llama4j.util.Parallel
 import java.nio.FloatBuffer
-import java.util.List
 import java.util.function.IntConsumer
 import kotlin.math.max
 import kotlin.math.pow
@@ -35,7 +34,7 @@ data class Llama(val configuration: LlamaConfiguration, val tokenizer: GemmaToke
       out.mapWithIndexInPlace(
         0,
         size
-      ) { _: Float, index: Int -> weight.get(index) * (finalss * x.getFloat(index.toLong())) }
+      ) { _, index -> weight.get(index) * (finalss * x.getFloat(index.toLong())) }
     }
 
     fun rmsnorm(
@@ -82,7 +81,7 @@ data class Llama(val configuration: LlamaConfiguration, val tokenizer: GemmaToke
       val sqrtDim = sqrt(dim.toDouble()).toFloat()
 
       // copy the token embedding into x
-      weights!!.token_embedding_table.copyTo(token * dim, state.x, 0, dim)
+      weights!!.tokenEmbeddingTable.copyTo(token * dim, state.x, 0, dim)
       state.x.mapInPlace { v: Float -> v * sqrtDim }
 
       // Compute per-layer inputs (if model has per-layer embeddings)
@@ -96,7 +95,7 @@ data class Llama(val configuration: LlamaConfiguration, val tokenizer: GemmaToke
         // Project x through perLayerModelProj, scale, and RMS norm per chunk
         weights.perLayerModelProj!!
           .matmul(state.x, state.perLayerInputs!!, plTotal, dim)
-        state.perLayerInputs.mapInPlace(0, plTotal) { v: Float -> v * projScale }
+        state.perLayerInputs.mapInPlace(0, plTotal) { it * projScale }
         for (l in 0..<config.numberOfLayers) {
           rmsnorm(
             state.perLayerInputs, l * plDim, state.perLayerInputs, l * plDim,
@@ -112,7 +111,7 @@ data class Llama(val configuration: LlamaConfiguration, val tokenizer: GemmaToke
         }
 
         // Scale combined input by 1/sqrt(2)
-        state.perLayerInputs.mapInPlace(0, plTotal) { v: Float -> v * inputScale }
+        state.perLayerInputs.mapInPlace(0, plTotal) { it * inputScale }
       }
 
       // forward all the layers
@@ -125,17 +124,17 @@ data class Llama(val configuration: LlamaConfiguration, val tokenizer: GemmaToke
         val hiddenDim = config.feedForwardLength[l]
 
         // attention rmsnorm
-        rmsnorm(state.xb, state.x, weights.rms_att_weight[l], dim, config.rmsNormEps)
+        rmsnorm(state.xb, state.x, weights.rmsAttWeight[l], dim, config.rmsNormEps)
 
         // Q projection + per-head RMS norm
         weights.wq[l].matmul(state.xb, state.q, queryDim, dim)
         for (h in 0..<config.numberOfHeads) {
-          rmsnorm(state.q, h * headSize, state.q, h * headSize, weights.attn_q_norm[l], headSize, config.rmsNormEps)
+          rmsnorm(state.q, h * headSize, state.q, h * headSize, weights.attnQNorm[l], headSize, config.rmsNormEps)
         }
 
         // RoPE (NeoX style: SWA layers use different frequencies than full attention)
-        val freqsReal = if (layerIsSWA) weights.freq_cis_real_swa else weights.freq_cis_real_full
-        val freqsImag = if (layerIsSWA) weights.freq_cis_imag_swa else weights.freq_cis_imag_full
+        val freqsReal = if (layerIsSWA) weights.freqCisRealSwa else weights.freqCisRealFull
+        val freqsImag = if (layerIsSWA) weights.freqCisImagSwa else weights.freqCisImagFull
         for (h in 0..<config.numberOfHeads) {
           val poffset = h * headSize
           var i0 = 0
@@ -166,7 +165,7 @@ data class Llama(val configuration: LlamaConfiguration, val tokenizer: GemmaToke
 
           // Per-head K norm (learned weights) and V norm (bare RMS)
           for (h in 0..<nKvHeads) {
-            rmsnorm(state.k, h * headSize, state.k, h * headSize, weights.attn_k_norm[l], headSize, config.rmsNormEps)
+            rmsnorm(state.k, h * headSize, state.k, h * headSize, weights.attnKNorm[l], headSize, config.rmsNormEps)
             rmsnormNoWeight(state.v, h * headSize, state.v, h * headSize, headSize, config.rmsNormEps)
           }
 
@@ -204,30 +203,29 @@ data class Llama(val configuration: LlamaConfiguration, val tokenizer: GemmaToke
 
           state.att.softmaxInPlace(attOffset + attStart, position - attStart + 1)
           val xbOffset = h * headSize
-          state.xb_k.fillInPlace(xbOffset, headSize, 0f)
+          state.xbK.fillInPlace(xbOffset, headSize, 0f)
           for (t in attStart..position) {
             val vOffset = t * kvDim + (h / kvMul) * headSize
             val a = state.att.getFloat((attOffset + t).toLong())
-            state.xb_k.saxpyInPlace(xbOffset, state.valueCache[kvLayer], vOffset, headSize, a)
+            state.xbK.saxpyInPlace(xbOffset, state.valueCache[kvLayer], vOffset, headSize, a)
           }
         }
 
         // Output projection + post-attention norm + residual
-        weights.wo[l].matmul(state.xb_k, state.xb2, dim, queryDim)
-        rmsnorm(state.xb2, state.xb2, weights.post_attention_norm[l], dim, config.rmsNormEps)
+        weights.wo[l].matmul(state.xbK, state.xb2, dim, queryDim)
+        rmsnorm(state.xb2, state.xb2, weights.postAttentionNorm[l], dim, config.rmsNormEps)
         state.x.addInPlace(state.xb2)
 
         // FFN
-        val isMoELayer = config.isMoE && weights.ffnGateInp!![l] != null
-        if (isMoELayer) {
+        if (config.isMoE) {
           // === MoE FFN: shared MLP + expert MoE ===
 
           // Shared MLP path: ffn_norm -> gate/up/down -> post_norm_1
 
-          rmsnorm(state.xb, state.x, weights.rms_ffn_weight[l], dim, config.rmsNormEps)
+          rmsnorm(state.xb, state.x, weights.rmsFfnWeight[l], dim, config.rmsNormEps)
           weights.w1[l].matmul(state.xb, state.hb, hiddenDim, dim)
           weights.w3[l].matmul(state.xb, state.hb2, hiddenDim, dim)
-          state.hb.mapInPlace(0, hiddenDim) { x: Float -> gelu(x) }
+          state.hb.mapInPlace(0, hiddenDim) { gelu(it) }
           state.hb.multiplyInPlace(0, state.hb2, 0, hiddenDim)
           weights.w2[l].matmul(state.hb, state.xb, dim, hiddenDim)
           rmsnorm(
@@ -264,11 +262,11 @@ data class Llama(val configuration: LlamaConfiguration, val tokenizer: GemmaToke
               )
             }
           }
-          weights.ffnGateInp!![l]!!
+          weights.ffnGateInp!![l]
             .matmul(state.xb2, state.routerLogits!!, config.expertCount, dim)
 
           // Softmax over router logits
-          state.routerLogits!!.softmaxInPlace(0, config.expertCount)
+          state.routerLogits.softmaxInPlace(0, config.expertCount)
 
           // Find top-k experts
           val nExperts = config.expertCount
@@ -303,7 +301,7 @@ data class Llama(val configuration: LlamaConfiguration, val tokenizer: GemmaToke
             // gate_up = ffn_gate_up_exps[expert] @ moeInput -> (2*expertFF,)
             val gateUpOffset = expertIdx * gateUpDim * dim
             weights.ffnGateUpExps!![l].matmul(
-              state.moeInput!!,
+              state.moeInput,
               state.expertGateUp!!,
               gateUpDim,
               dim,
@@ -311,7 +309,7 @@ data class Llama(val configuration: LlamaConfiguration, val tokenizer: GemmaToke
             )
 
             // gate = gelu(gate_up[0:expertFF]), up = gate_up[expertFF:2*expertFF]
-            state.expertGateUp!!.mapInPlace(0, expertFF) { x: Float -> gelu(x) }
+            state.expertGateUp.mapInPlace(0, expertFF) { gelu(it) }
             for (i in 0..<expertFF) {
               state.expertGateUp.setFloat(
                 i,
@@ -331,12 +329,12 @@ data class Llama(val configuration: LlamaConfiguration, val tokenizer: GemmaToke
 
             // Accumulate: moeOutput += prob * downScale * expertDown
             val finalWeight = prob * downScale
-            state.moeOutput!!.saxpyInPlace(0, state.expertDown!!, 0, dim, finalWeight)
+            state.moeOutput.saxpyInPlace(0, state.expertDown, 0, dim, finalWeight)
           }
 
           // Post-norm for MoE output
           rmsnorm(
-            state.moeOutput!!,
+            state.moeOutput,
             state.moeOutput,
             weights.ffnPostNorm2!![l],
             dim,
@@ -347,24 +345,24 @@ data class Llama(val configuration: LlamaConfiguration, val tokenizer: GemmaToke
           state.xb.addInPlace(0, state.moeOutput, 0, dim)
 
           // Overall post-FFW norm + residual
-          rmsnorm(state.xb, state.xb, weights.post_ffw_norm[l], dim, config.rmsNormEps)
+          rmsnorm(state.xb, state.xb, weights.postFfwNorm[l], dim, config.rmsNormEps)
           state.x.addInPlace(state.xb)
         } else {
           // Standard dense FFN: w2(GELU(w1(x)) * w3(x))
-          rmsnorm(state.xb, state.x, weights.rms_ffn_weight[l], dim, config.rmsNormEps)
+          rmsnorm(state.xb, state.x, weights.rmsFfnWeight[l], dim, config.rmsNormEps)
           weights.w1[l].matmul(state.xb, state.hb, hiddenDim, dim)
           weights.w3[l].matmul(state.xb, state.hb2, hiddenDim, dim)
-          state.hb.mapInPlace(0, hiddenDim) { x: Float -> gelu(x) }
+          state.hb.mapInPlace(0, hiddenDim) { gelu(it) }
           state.hb.multiplyInPlace(0, state.hb2, 0, hiddenDim)
           weights.w2[l].matmul(state.hb, state.xb, dim, hiddenDim)
-          rmsnorm(state.xb, state.xb, weights.post_ffw_norm[l], dim, config.rmsNormEps)
+          rmsnorm(state.xb, state.xb, weights.postFfwNorm[l], dim, config.rmsNormEps)
           state.x.addInPlace(state.xb)
         }
 
         // Per-layer embedding: GELU-gated projection
         if (plDim > 0 && weights.perLayerInpGate != null) {
           weights.perLayerInpGate[l].matmul(state.x, state.plGate!!, plDim, dim)
-          state.plGate!!.mapInPlace(0, plDim) { x: Float -> gelu(x) }
+          state.plGate.mapInPlace(0, plDim) { gelu(it) }
           val plOffset = l * plDim
           for (i in 0..<plDim) {
             state.plGate.setFloat(
@@ -380,7 +378,7 @@ data class Llama(val configuration: LlamaConfiguration, val tokenizer: GemmaToke
             plDim
           )
           rmsnorm(
-            state.plProj!!,
+            state.plProj,
             state.plProj,
             weights.perLayerPostNorm!![l],
             dim,
@@ -392,16 +390,16 @@ data class Llama(val configuration: LlamaConfiguration, val tokenizer: GemmaToke
         // Layer output scale
         val scale = weights.layerOutputScale[l]
         if (scale != 1.0f) {
-          state.x.mapInPlace(0, dim) { v: Float -> v * scale }
+          state.x.mapInPlace(0, dim) { it * scale }
         }
       }
 
       // Final norm + logits
-      rmsnorm(state.x, state.x, weights!!.rms_final_weight, dim, config.rmsNormEps)
+      rmsnorm(state.x, state.x, weights.rmsFinalWeight, dim, config.rmsNormEps)
       weights.wcls.matmul(state.x, state.logits, config.vocabularySize, dim)
       if (config.logitSoftcapping > 0) {
         val cap = config.logitSoftcapping
-        state.logits.mapInPlace { v: Float -> cap * tanh((v / cap).toDouble()).toFloat() }
+        state.logits.mapInPlace { cap * tanh((it / cap).toDouble()).toFloat() }
       }
       return state.logits
     }
@@ -434,9 +432,9 @@ data class Llama(val configuration: LlamaConfiguration, val tokenizer: GemmaToke
       for (position in startPosition..<maxTokens) {
         forward(model, state, token, position)
         if (promptIndex < promptTokens.size) {
-          nextToken = promptTokens.get(promptIndex++)
+          nextToken = promptTokens[promptIndex++]
           if (echo) {
-            System.err.print(replaceControlCharacters(model.tokenizer.decode(List.of<Int>(nextToken))))
+            System.err.print(replaceControlCharacters(model.tokenizer.decode(listOf(nextToken))))
           }
           if (promptIndex >= promptTokens.size) {
             startGen = System.nanoTime()
@@ -444,7 +442,7 @@ data class Llama(val configuration: LlamaConfiguration, val tokenizer: GemmaToke
         } else {
           nextToken = sampler.sampleToken(state.logits)
           if (echo) {
-            System.err.print(replaceControlCharacters(model.tokenizer.decode(List.of<Int>(nextToken))))
+            System.err.print(replaceControlCharacters(model.tokenizer.decode(listOf(nextToken))))
           }
           generatedTokens.add(nextToken)
           onTokenGenerated.accept(nextToken)
@@ -461,15 +459,17 @@ data class Llama(val configuration: LlamaConfiguration, val tokenizer: GemmaToke
       val genNanos = elapsedNanos - startGen + startNanos
       val timingPrefix = if (color) ANSI_CYAN else ""
       val timingSuffix = if (color) ANSI_RESET else ""
-      System.err.printf(
-        "%n%scontext: %d/%d prompt: %.2f tokens/s (%d) generation: %.2f tokens/s (%d)%s%n",
-        timingPrefix,
-        startPosition + promptIndex + generatedTokens.size, model.configuration.contextLength,
-        promptTokens.size / (promptNanos / 1000000000.0), promptTokens.size,
-        generatedTokens.size / (genNanos / 1000000000.0), generatedTokens.size,
-        timingSuffix
+      val contextUsed = startPosition + promptIndex + generatedTokens.size
+      val contextLength = model.configuration.contextLength
+      val promptTps = "%.2f".format(promptTokens.size / (promptNanos / 1000000000.0))
+      val genTps = "%.2f".format(generatedTokens.size / (genNanos / 1000000000.0))
+      System.err.println(
+        "\n${timingPrefix}" +
+            "context: $contextUsed/$contextLength " +
+            "prompt: $promptTps tokens/s (${promptTokens.size}) " +
+            "generation: $genTps tokens/s (${generatedTokens.size})" +
+            "${timingSuffix}\n"
       )
-
       return generatedTokens
     }
   }

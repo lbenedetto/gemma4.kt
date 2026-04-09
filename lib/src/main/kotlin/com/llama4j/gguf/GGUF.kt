@@ -8,40 +8,31 @@ import java.nio.channels.FileChannel
 import java.nio.charset.StandardCharsets
 import java.nio.file.Path
 
-class GGUF {
+class GGUF private constructor(reader: ChannelReader) {
   private var tensorCount = 0 // uint64_t
   var alignment: Int = 0
     get() {
       if (field != 0) {
         return field
       }
-      field = metadata!!
+      field = metadata
         .getOrDefault("general.alignment", DEFAULT_ALIGNMENT) as Int
       assert(Integer.bitCount(field) == 1) { "alignment must be a power of two" }
       return field
     }
     private set
-  private var metadata: MutableMap<String, Any>? = null // lateinit
-  private var tensorInfos: MutableMap<String, GGUFTensorInfo>? = null // lateinit
+  lateinit var metadata: MutableMap<String, Any> // Is definitely initialized in init -> readHeader
+  var tensorInfos: MutableMap<String, GGUFTensorInfo>
   var tensorDataOffset: Long = 0
     private set
 
-  fun getMetadata(): MutableMap<String, Any> {
-    return metadata!!
-  }
-
-  fun getTensorInfos(): MutableMap<String, GGUFTensorInfo> {
-    return tensorInfos!!
-  }
-
-  @Throws(IOException::class)
-  private fun loadModelImpl(reader: ChannelReader) {
+  init {
     readHeader(reader)
     this.tensorInfos = HashMap.newHashMap(tensorCount)
-    for (i in 0..<tensorCount) {
+    repeat((0..<tensorCount).count()) {
       val ti = readTensorInfo(reader)
-      assert(!tensorInfos!!.containsKey(ti.name))
-      tensorInfos!!.put(ti.name, ti)
+      assert(!tensorInfos.containsKey(ti.name))
+      tensorInfos[ti.name] = ti
     }
     val position = reader.position()
     val padding = ((this.alignment - (position % this.alignment)) % this.alignment).toInt()
@@ -59,10 +50,10 @@ class GGUF {
   private fun readTensorInfo(reader: ChannelReader): GGUFTensorInfo {
     val name = readString(reader)
     assert(name.length <= 64)
-    val n_dimensions = readInt(reader)
-    assert(n_dimensions <= 4)
-    val dimensions = IntArray(n_dimensions)
-    for (i in 0..<n_dimensions) {
+    val nDimensions = readInt(reader)
+    assert(nDimensions <= 4)
+    val dimensions = IntArray(nDimensions)
+    for (i in 0..<nDimensions) {
       dimensions[i] = Math.toIntExact(readLong(reader))
     }
     val ggmlType = readGGMLType(reader)
@@ -107,8 +98,8 @@ class GGUF {
     this.metadata = HashMap.newHashMap(metadataKvCount)
     repeat((0..<metadataKvCount).count()) {
       val keyValue = readKeyValuePair(reader)
-      assert(!metadata!!.containsKey(keyValue.first))
-      metadata!![keyValue.first] = keyValue.second
+      assert(!metadata.containsKey(keyValue.first))
+      metadata[keyValue.first] = keyValue.second
     }
   }
 
@@ -197,7 +188,7 @@ class GGUF {
   companion object {
     private const val GGUF_MAGIC = 0x46554747
     private const val DEFAULT_ALIGNMENT = 32 // must be a power of 2
-    private val PARSE_BUFFER_SIZE = 1 shl 20
+    private const val PARSE_BUFFER_SIZE = 1 shl 20
     private val SUPPORTED_GGUF_VERSIONS = mutableListOf(2, 3)
 
     @Throws(IOException::class)
@@ -216,7 +207,7 @@ class GGUF {
         val numberOfElements: Long = FloatTensor.numberOfElementsLong(*ti.dimensions)
         val sizeInBytes = ti.ggmlType.byteSizeFor(numberOfElements)
         val memorySegment = tensorData.asSlice(ti.offset, sizeInBytes)
-        tensorEntries.put(ti.name, GGMLTensorEntry(tensorData, ti.name, ti.ggmlType, ti.dimensions, memorySegment))
+        tensorEntries[ti.name] = GGMLTensorEntry(tensorData, ti.name, ti.ggmlType, ti.dimensions, memorySegment)
       }
       return tensorEntries
     }
@@ -232,10 +223,7 @@ class GGUF {
     fun loadModel(fileChannel: FileChannel, modelLabel: String): GGUF {
       Timer.log("Parse $modelLabel").use {
         fileChannel.position(0L)
-        val gguf = GGUF()
-        val reader = ChannelReader(fileChannel, PARSE_BUFFER_SIZE)
-        gguf.loadModelImpl(reader)
-        return gguf
+        return GGUF(ChannelReader(fileChannel, PARSE_BUFFER_SIZE))
       }
     }
   }
