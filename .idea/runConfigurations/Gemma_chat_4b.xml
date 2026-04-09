@@ -1,0 +1,10 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Gemma chat 4b" type="Application" factoryName="Application">
+    <option name="MAIN_CLASS_NAME" value="com.llama4j.Gemma4" />
+    <module name="gemma4.kt.lib.main" />
+    <option name="PROGRAM_PARAMETERS" value="--model &quot;models/gemma-4-E4B-it-Q8_0.gguf&quot; --chat" />
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>
