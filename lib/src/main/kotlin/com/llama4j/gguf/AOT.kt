@@ -1,6 +1,6 @@
 package com.llama4j.gguf
 
-import com.llama4j.Options
+import com.llama4j.Config.DEFAULT_MAX_TOKENS
 import com.llama4j.model.Llama
 import com.llama4j.model.RoPE
 import com.llama4j.util.Timer
@@ -24,7 +24,7 @@ object AOT {
       require(!(!Files.exists(path) || !Files.isRegularFile(path))) { "Cannot pre-load model: $path" }
       FileChannel.open(path, StandardOpenOption.READ).use { fileChannel ->
         val gguf: GGUF = GGUF.loadModel(fileChannel, path.toString())
-        val base = ModelLoader.loadModel(null, gguf, Options.DEFAULT_MAX_TOKENS, false)
+        val base = ModelLoader.loadModel(null, gguf, DEFAULT_MAX_TOKENS, false)
         // Precompute RoPE frequencies at build time (pure Java arrays, survives native-image)
         val config = base.configuration
         val ropeFreqsSWA = RoPE.precomputeFreqsCis(

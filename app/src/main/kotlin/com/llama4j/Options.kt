@@ -1,5 +1,6 @@
 package com.llama4j
 
+import com.llama4j.Config.DEFAULT_MAX_TOKENS
 import java.io.PrintStream
 import java.nio.file.Path
 import kotlin.system.exitProcess
@@ -22,7 +23,6 @@ data class Options(
   val colors: Boolean
 ) {
   companion object {
-    const val DEFAULT_MAX_TOKENS: Int = 1024
 
     fun require(condition: Boolean, message: () -> String) {
       if (!condition) {

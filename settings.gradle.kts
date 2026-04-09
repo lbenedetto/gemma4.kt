@@ -5,3 +5,4 @@ plugins {
 
 rootProject.name = "gemma4.kt"
 include("lib")
+include("app")
