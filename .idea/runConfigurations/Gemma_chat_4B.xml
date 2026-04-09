@@ -1,0 +1,11 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Gemma chat 4B" type="JetRunConfigurationType">
+    <option name="MAIN_CLASS_NAME" value="com.llama4j.Gemma4" />
+    <module name="gemma4.kt.app.main" />
+    <option name="PROGRAM_PARAMETERS" value="--model &quot;models/gemma-4-E4B-it-Q8_0.gguf&quot; --chat" />
+    <shortenClasspath name="NONE" />
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>
