@@ -1,6 +1,5 @@
 package com.llama4j.floattensor
 
-import com.llama4j.gguf.GGMLType
 import jdk.incubator.vector.FloatVector
 import jdk.incubator.vector.ShortVector
 import jdk.incubator.vector.VectorOperators
@@ -29,8 +28,8 @@ internal class F16FloatTensor(size: Long, memorySegment: MemorySegment) : FloatT
     throw UnsupportedOperationException("getFloatVector")
   }
 
-  override fun type(): GGMLType {
-    return GGMLType.F16
+  override fun type(): com.llama4j.gguf.GGMLType {
+    return _root_ide_package_.com.llama4j.gguf.GGMLType.F16
   }
 
   override fun getFloat(index: Long): Float {

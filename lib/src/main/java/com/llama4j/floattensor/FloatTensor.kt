@@ -1,7 +1,5 @@
 package com.llama4j.floattensor
 
-import com.llama4j.gguf.GGMLType
-import com.llama4j.util.Parallel
 import jdk.incubator.vector.FloatVector
 import jdk.incubator.vector.VectorShape
 import jdk.incubator.vector.VectorSpecies
@@ -19,19 +17,19 @@ abstract class FloatTensor {
 
   abstract fun getFloatVector(species: VectorSpecies<Float>, offset: Int): FloatVector?
 
-  abstract fun type(): GGMLType?
+  abstract fun type(): com.llama4j.gguf.GGMLType?
 
   open fun dot(thisOffset: Int, that: FloatTensor, thatOffset: Int, size: Int): Float {
     return scalarDot(this, thisOffset, that, thatOffset, size)
   }
 
   fun matmul(that: FloatTensor, out: FloatTensor, dim0: Int, dim1: Int) {
-    Parallel.parallelFor(0, dim0) { i: Int -> out.setFloat(i, dot(i * dim1, that, 0, dim1)) }
+    _root_ide_package_.com.llama4j.util.Parallel.parallelFor(0, dim0) { i: Int -> out.setFloat(i, dot(i * dim1, that, 0, dim1)) }
   }
 
   // matmul with offset into this tensor (for expert weight slicing in 3D tensors)
   fun matmul(that: FloatTensor, out: FloatTensor, dim0: Int, dim1: Int, thisOffset: Int) {
-    Parallel.parallelFor(0, dim0) { i: Int -> out.setFloat(i, dot(thisOffset + i * dim1, that, 0, dim1)) }
+    _root_ide_package_.com.llama4j.util.Parallel.parallelFor(0, dim0) { i: Int -> out.setFloat(i, dot(thisOffset + i * dim1, that, 0, dim1)) }
   }
 
   fun reduce(thisOffset: Int, size: Int, seed: Float, reduce: (Float, Float) -> Float): Float {
