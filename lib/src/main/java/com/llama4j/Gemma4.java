@@ -18,6 +18,14 @@
 // jbang Gemma4.java --help
 package com.llama4j;
 
+import com.llama4j.gguf.ModelLoader;
+import com.llama4j.model.GemmaChatFormat;
+import com.llama4j.model.Llama;
+import com.llama4j.sampler.CategoricalSampler;
+import com.llama4j.sampler.ToppSampler;
+import com.llama4j.tokenizer.GemmaTokenizer;
+import com.llama4j.sampler.Sampler;
+
 import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.file.Path;
