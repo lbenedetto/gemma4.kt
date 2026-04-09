@@ -1,10 +1,8 @@
-///usr/bin/env jbang "$0" "$@" ; exit $?
-//JAVA 21+
+/**usr/bin/env jbang "$0" "$@" ; exit $? */ //JAVA 21+
 //PREVIEW
 //COMPILE_OPTIONS --add-modules=jdk.incubator.vector
 //RUNTIME_OPTIONS --add-modules=jdk.incubator.vector -Djdk.incubator.vector.VECTOR_ACCESS_OOB_CHECK=0
 //MAIN com.llama4j.Gemma4
-
 // Gemma 4 inference in pure Java
 // Author: Alfonso² Peterssen
 // Based on Andrej Karpathy's llama2.c and minbpe projects
@@ -16,262 +14,296 @@
 //
 // Run:
 // jbang Gemma4.java --help
-package com.llama4j;
+package com.llama4j
 
-import com.llama4j.gguf.AOT;
-import com.llama4j.gguf.ModelLoader;
-import com.llama4j.model.*;
-import com.llama4j.sampler.CategoricalSampler;
-import com.llama4j.sampler.Sampler;
-import com.llama4j.sampler.ToppSampler;
-import com.llama4j.tokenizer.GemmaTokenizer;
+import com.llama4j.floattensor.FloatTensor
+import com.llama4j.gguf.AOT
+import com.llama4j.gguf.ModelLoader
+import com.llama4j.model.*
+import com.llama4j.sampler.CategoricalSampler
+import com.llama4j.sampler.Sampler
+import com.llama4j.sampler.ToppSampler
+import com.llama4j.tokenizer.GemmaTokenizer
+import java.io.IOException
+import java.io.PrintStream
+import java.util.*
+import java.util.List
+import java.util.function.IntConsumer
+import java.util.random.RandomGeneratorFactory
+import kotlin.collections.ArrayList
+import kotlin.collections.MutableList
+import kotlin.collections.contains
+import kotlin.ranges.contains
+import kotlin.text.contains
+import kotlin.text.equals
 
-import java.io.IOException;
-import java.io.PrintStream;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Scanner;
-import java.util.Set;
-import java.util.function.IntConsumer;
-import java.util.random.RandomGenerator;
-import java.util.random.RandomGeneratorFactory;
+object Gemma4 {
+  fun selectSampler(vocabularySize: Int, temperature: Float, topp: Float, rngSeed: Long): Sampler {
+    val sampler: Sampler
+    if (temperature == 0.0f) {
+      sampler = Sampler.Companion.ARGMAX
+    } else {
+      val rng = RandomGeneratorFactory.getDefault().create(rngSeed)
+      val innerSampler: Sampler?
+      if (topp <= 0 || topp >= 1) {
+        innerSampler = CategoricalSampler(rng)
+      } else {
+        innerSampler = ToppSampler(vocabularySize, topp, rng)
+      }
+      sampler = Sampler { logits: FloatTensor? ->
+        val logitsSize = Math.toIntExact(logits!!.size())
+        logits.divideInPlace(0, logitsSize, temperature)
+        logits.softmaxInPlace(0, logitsSize)
+        innerSampler.sampleToken(logits)
+      }
+    }
+    return sampler
+  }
 
-import static java.util.Objects.requireNonNull;
+  private const val ANSI_GREY = "\u001b[90m"
+  private const val ANSI_RESET = "\u001b[0m"
 
-public class Gemma4 {
+  private fun plainStreamingPrinter(tokenizer: GemmaTokenizer): IntConsumer {
+    return IntConsumer { token: Int ->
+      if (!tokenizer.isSpecialToken(token)) {
+        print(tokenizer.decode(List.of<Int>(token)))
+      }
+    }
+  }
 
-    static Sampler selectSampler(int vocabularySize, float temperature, float topp, long rngSeed) {
-        Sampler sampler;
-        if (temperature == 0.0f) {
-            sampler = Sampler.ARGMAX;
+  private fun onThinkingStart(thoughtOut: PrintStream, ansi: Boolean) {
+    if (ansi) {
+      thoughtOut.print(ANSI_GREY)
+    }
+    thoughtOut.println("[Start thinking]")
+  }
+
+  private fun onThinkingEnd(thoughtOut: PrintStream, ansi: Boolean, emitted: Boolean) {
+    if (emitted) {
+      thoughtOut.println()
+    }
+    thoughtOut.println("[End thinking]")
+    if (ansi) {
+      thoughtOut.print(ANSI_RESET)
+    }
+    thoughtOut.println()
+  }
+
+  fun supportsAnsiColors(colorMode: String): Boolean {
+    return when (colorMode) {
+      "on" -> true
+      "auto" -> {
+        val noColor = System.getenv("NO_COLOR")
+        if (noColor != null) {
+          false
+        }
+        val term = System.getenv("TERM")
+        !"dumb".equals(term, ignoreCase = true)
+      }
+
+      else -> false
+    }
+  }
+
+  private fun streamingPrinter(tokenizer: GemmaTokenizer, options: Options): IntConsumer {
+    if (!options.stream) {
+      return IntConsumer { token: Int -> }
+    }
+
+    val channelOpen = tokenizer.specialTokens.get("<|channel>")
+    val channelClose = tokenizer.specialTokens.get("<channel|>")
+    if (channelOpen == null || channelClose == null) {
+      return plainStreamingPrinter(tokenizer)
+    }
+
+    val thinkEnabled = options.think
+    val thoughtOut = if (options.thinkInline) System.out else System.err
+    val ansi = options.colors
+    val inChannel = booleanArrayOf(false)
+    val emitted = booleanArrayOf(false)
+    return IntConsumer { token: Int ->
+      if (token == channelOpen) {
+        if (thinkEnabled) {
+          onThinkingStart(thoughtOut, ansi)
+        }
+        inChannel[0] = true
+        emitted[0] = false
+        return@IntConsumer
+      }
+      if (token == channelClose) {
+        if (thinkEnabled) {
+          onThinkingEnd(thoughtOut, ansi, emitted[0])
+        }
+        inChannel[0] = false
+        emitted[0] = false
+        return@IntConsumer
+      }
+      if (!tokenizer.isSpecialToken(token)) {
+        val text = tokenizer.decode(List.of<Int>(token))
+        if (inChannel[0]) {
+          if (thinkEnabled) {
+            thoughtOut.print(text)
+            emitted[0] = true
+          }
         } else {
-            RandomGenerator rng = RandomGeneratorFactory.getDefault().create(rngSeed);
-            Sampler innerSampler;
-            if (topp <= 0 || topp >= 1) {
-                innerSampler = new CategoricalSampler(rng);
-            } else {
-                innerSampler = new ToppSampler(vocabularySize, topp, rng);
-            }
-            sampler = logits -> {
-                int logitsSize = Math.toIntExact(logits.size());
-                logits.divideInPlace(0, logitsSize, temperature);
-                logits.softmaxInPlace(0, logitsSize);
-                return innerSampler.sampleToken(logits);
-            };
+          print(text)
         }
-        return sampler;
+      }
+    }
+  }
+
+  private fun visibleTokens(tokenizer: GemmaTokenizer, tokens: MutableList<Int>, think: Boolean): MutableList<Int> {
+    return if (think) stripThoughtChannelTokens(tokenizer, tokens) else tokens
+  }
+
+  private fun stripThoughtChannelTokens(tokenizer: GemmaTokenizer, tokens: MutableList<Int>): MutableList<Int> {
+    val channelOpen = tokenizer.specialTokens.get("<|channel>")
+    val channelClose = tokenizer.specialTokens.get("<channel|>")
+    if (channelOpen == null || channelClose == null || tokens.isEmpty()) {
+      return tokens
+    }
+    val out: MutableList<Int> = ArrayList<Int>(tokens.size)
+    var inChannel = false
+    for (tok in tokens) {
+      if (tok == channelOpen) {
+        inChannel = true
+        continue
+      }
+      if (tok == channelClose) {
+        inChannel = false
+        continue
+      }
+      if (!inChannel) {
+        out.add(tok)
+      }
+    }
+    return out
+  }
+
+  fun runInteractive(model: Llama, sampler: Sampler, options: Options) {
+    var state: LlamaState? = null
+    val chatFormat = GemmaChatFormat(model.tokenizer)
+    val conversationTokens: MutableList<Int> = ArrayList<Int>()
+    if (options.think) {
+      conversationTokens.addAll(chatFormat.encodeSystemThinkingTurn(options.systemPrompt))
+    } else if (options.systemPrompt != null) {
+      conversationTokens.addAll(chatFormat.encodeMessage(Message(Role.Companion.SYSTEM, options.systemPrompt!!)))
+    }
+    var startPosition = 0
+    val `in` = Scanner(System.`in`)
+    loop@ while (true) {
+      print("> ")
+      System.out.flush()
+      val userText = `in`.nextLine()
+      when (userText) {
+        "/quit", "/exit" -> break@loop
+        "/context" -> {
+          System.out.printf(
+            "%d out of %d context tokens used (%d tokens remaining)%n",
+            conversationTokens.size,
+            options.maxTokens,
+            options.maxTokens - conversationTokens.size
+          )
+          continue
+        }
+      }
+      if (state == null) {
+        state = model.createNewState()
+      }
+      conversationTokens.addAll(chatFormat.encodeMessage(Message(Role.Companion.USER, userText)))
+      conversationTokens.addAll(chatFormat.encodeHeader(Message(Role.Companion.MODEL, "")))
+
+      val stopTokens = chatFormat.getStopTokens()
+      val printer = streamingPrinter(model.tokenizer, options)
+      val responseTokens: MutableList<Int> = Llama.Companion.generateTokens(
+        model,
+        state,
+        startPosition,
+        conversationTokens.subList(startPosition, conversationTokens.size),
+        stopTokens,
+        options.maxTokens,
+        sampler,
+        options.echo,
+        options.colors,
+        printer
+      )
+      var stopToken: Int? = null
+      if (!responseTokens.isEmpty() && stopTokens.contains(responseTokens.getLast())) {
+        stopToken = responseTokens.getLast()
+        responseTokens.removeLast()
+      }
+      val visibleResponseTokens = visibleTokens(model.tokenizer, responseTokens, options.think)
+      conversationTokens.addAll(responseTokens)
+      if (stopToken != null) {
+        conversationTokens.add(stopToken)
+      }
+      startPosition = conversationTokens.size
+      if (!options.stream) {
+        val responseText = model.tokenizer.decode(visibleResponseTokens)
+        println(responseText)
+      }
+      if (stopToken == null) {
+        System.err.println("Ran out of context length...")
+        break
+      }
+    }
+  }
+
+  fun runInstructOnce(model: Llama, sampler: Sampler, options: Options) {
+    val prompt = Objects.requireNonNull<String?>(options.prompt)
+    val state = model.createNewState()
+    val chatFormat = GemmaChatFormat(model.tokenizer)
+    val promptTokens: MutableList<Int> = ArrayList<Int>()
+
+    if (options.suffix != null) {
+      promptTokens.addAll(chatFormat.encodeFillInTheMiddle(prompt!!, options.suffix!!))
+    } else {
+      if (options.think) {
+        promptTokens.addAll(chatFormat.encodeSystemThinkingTurn(options.systemPrompt))
+      } else if (options.systemPrompt != null) {
+        promptTokens.addAll(chatFormat.encodeMessage(Message(Role.Companion.SYSTEM, options.systemPrompt!!)))
+      }
+      promptTokens.addAll(chatFormat.encodeMessage(Message(Role.Companion.USER, prompt!!)))
+      promptTokens.addAll(chatFormat.encodeHeader(Message(Role.Companion.MODEL, "")))
     }
 
-    private static final String ANSI_GREY  = "\033[90m";
-    private static final String ANSI_RESET = "\033[0m";
-
-    private static IntConsumer plainStreamingPrinter(GemmaTokenizer tokenizer) {
-        return token -> {
-            if (!tokenizer.isSpecialToken(token)) {
-                System.out.print(tokenizer.decode(List.of(token)));
-            }
-        };
+    val stopTokens = chatFormat.getStopTokens()
+    val printer = streamingPrinter(model.tokenizer, options)
+    val responseTokens: MutableList<Int> = Llama.Companion.generateTokens(
+      model,
+      state,
+      0,
+      promptTokens,
+      stopTokens,
+      options.maxTokens,
+      sampler,
+      options.echo,
+      options.colors,
+      printer
+    )
+    if (!responseTokens.isEmpty() && stopTokens.contains(responseTokens.getLast())) {
+      responseTokens.removeLast()
     }
-
-    private static void onThinkingStart(PrintStream thoughtOut, boolean ansi) {
-        if (ansi) {
-            thoughtOut.print(ANSI_GREY);
-        }
-        thoughtOut.println("[Start thinking]");
+    val visibleResponseTokens = visibleTokens(model.tokenizer, responseTokens, options.think)
+    if (!options.stream) {
+      val responseText = model.tokenizer.decode(visibleResponseTokens)
+      println(responseText)
     }
+  }
 
-    private static void onThinkingEnd(PrintStream thoughtOut, boolean ansi, boolean emitted) {
-        if (emitted) {
-            thoughtOut.println();
-        }
-        thoughtOut.println("[End thinking]");
-        if (ansi) {
-            thoughtOut.print(ANSI_RESET);
-        }
-        thoughtOut.println();
+  @Throws(IOException::class)
+  @JvmStatic
+  fun main(args: Array<String>) {
+    val options: Options = Options.Companion.parseOptions(args)
+    var model = AOT.tryUsePreLoaded(options.modelPath, options.maxTokens)
+    if (model == null) {
+      model = ModelLoader.loadModel(options.modelPath, options.maxTokens)
     }
-
-    static boolean supportsAnsiColors(String colorMode) {
-        return switch (colorMode) {
-            case "on" -> true;
-            case "auto" -> {
-                String noColor = System.getenv("NO_COLOR");
-                if (noColor != null) {
-                    yield false;
-                }
-                String term = System.getenv("TERM");
-                yield !"dumb".equalsIgnoreCase(term);
-            }
-            default -> false;
-        };
+    val sampler = selectSampler(model.configuration.vocabularySize, options.temperature, options.topp, options.seed)
+    if (options.interactive) {
+      runInteractive(model, sampler, options)
+    } else {
+      runInstructOnce(model, sampler, options)
     }
-
-    private static IntConsumer streamingPrinter(GemmaTokenizer tokenizer, Options options) {
-        if (!options.stream()) {
-            return token -> {};
-        }
-
-        Integer channelOpen = tokenizer.getSpecialTokens().get("<|channel>");
-        Integer channelClose = tokenizer.getSpecialTokens().get("<channel|>");
-        if (channelOpen == null || channelClose == null) {
-            return plainStreamingPrinter(tokenizer);
-        }
-
-        boolean thinkEnabled = options.think();
-        PrintStream thoughtOut = options.thinkInline() ? System.out : System.err;
-        boolean ansi = options.colors();
-        boolean[] inChannel = {false};
-        boolean[] emitted = {false};
-        return token -> {
-            if (token == channelOpen) {
-                if (thinkEnabled) {
-                    onThinkingStart(thoughtOut, ansi);
-                }
-                inChannel[0] = true;
-                emitted[0] = false;
-                return;
-            }
-            if (token == channelClose) {
-                if (thinkEnabled) {
-                    onThinkingEnd(thoughtOut, ansi, emitted[0]);
-                }
-                inChannel[0] = false;
-                emitted[0] = false;
-                return;
-            }
-            if (!tokenizer.isSpecialToken(token)) {
-                String text = tokenizer.decode(List.of(token));
-                if (inChannel[0]) {
-                    if (thinkEnabled) {
-                        thoughtOut.print(text);
-                        emitted[0] = true;
-                    }
-                } else {
-                    System.out.print(text);
-                }
-            }
-        };
-    }
-
-    private static List<Integer> visibleTokens(GemmaTokenizer tokenizer, List<Integer> tokens, boolean think) {
-        return think ? stripThoughtChannelTokens(tokenizer, tokens) : tokens;
-    }
-
-    private static List<Integer> stripThoughtChannelTokens(GemmaTokenizer tokenizer, List<Integer> tokens) {
-        Integer channelOpen = tokenizer.getSpecialTokens().get("<|channel>");
-        Integer channelClose = tokenizer.getSpecialTokens().get("<channel|>");
-        if (channelOpen == null || channelClose == null || tokens.isEmpty()) {
-            return tokens;
-        }
-        List<Integer> out = new ArrayList<>(tokens.size());
-        boolean inChannel = false;
-        for (int tok : tokens) {
-            if (tok == channelOpen) { inChannel = true; continue; }
-            if (tok == channelClose) { inChannel = false; continue; }
-            if (!inChannel) { out.add(tok); }
-        }
-        return out;
-    }
-
-    static void runInteractive(Llama model, Sampler sampler, Options options) {
-        LlamaState state = null;
-        GemmaChatFormat chatFormat = new GemmaChatFormat(model.tokenizer());
-        List<Integer> conversationTokens = new ArrayList<>();
-        if (options.think()) {
-            conversationTokens.addAll(chatFormat.encodeSystemThinkingTurn(options.systemPrompt()));
-        } else if (options.systemPrompt() != null) {
-            conversationTokens.addAll(chatFormat.encodeMessage(new Message(Role.SYSTEM, options.systemPrompt())));
-        }
-        int startPosition = 0;
-        Scanner in = new Scanner(System.in);
-        loop: while (true) {
-            System.out.print("> ");
-            System.out.flush();
-            String userText = in.nextLine();
-            switch (userText) {
-                case "/quit":
-                case "/exit": break loop;
-                case "/context": {
-                    System.out.printf("%d out of %d context tokens used (%d tokens remaining)%n",
-                            conversationTokens.size(),
-                            options.maxTokens(),
-                            options.maxTokens() - conversationTokens.size());
-                    continue;
-                }
-            }
-            if (state == null) {
-                state = model.createNewState();
-            }
-            conversationTokens.addAll(chatFormat.encodeMessage(new Message(Role.USER, userText)));
-            conversationTokens.addAll(chatFormat.encodeHeader(new Message(Role.MODEL, "")));
-
-            Set<Integer> stopTokens = chatFormat.getStopTokens();
-            IntConsumer printer = streamingPrinter(model.tokenizer(), options);
-            List<Integer> responseTokens = Llama.generateTokens(model, state, startPosition, conversationTokens.subList(startPosition, conversationTokens.size()), stopTokens, options.maxTokens(), sampler, options.echo(), options.colors(), printer);
-            Integer stopToken = null;
-            if (!responseTokens.isEmpty() && stopTokens.contains(responseTokens.getLast())) {
-                stopToken = responseTokens.getLast();
-                responseTokens.removeLast();
-            }
-            List<Integer> visibleResponseTokens = visibleTokens(model.tokenizer(), responseTokens, options.think());
-            conversationTokens.addAll(responseTokens);
-            if (stopToken != null) {
-                conversationTokens.add(stopToken);
-            }
-            startPosition = conversationTokens.size();
-            if (!options.stream()) {
-                String responseText = model.tokenizer().decode(visibleResponseTokens);
-                System.out.println(responseText);
-            }
-            if (stopToken == null) {
-                System.err.println("Ran out of context length...");
-                break;
-            }
-        }
-    }
-
-    static void runInstructOnce(Llama model, Sampler sampler, Options options) {
-        var prompt = requireNonNull(options.prompt());
-        LlamaState state = model.createNewState();
-        GemmaChatFormat chatFormat = new GemmaChatFormat(model.tokenizer());
-        List<Integer> promptTokens = new ArrayList<>();
-
-        if (options.suffix() != null) {
-            promptTokens.addAll(chatFormat.encodeFillInTheMiddle(prompt, options.suffix()));
-        } else {
-            if (options.think()) {
-                promptTokens.addAll(chatFormat.encodeSystemThinkingTurn(options.systemPrompt()));
-            } else if (options.systemPrompt() != null) {
-                promptTokens.addAll(chatFormat.encodeMessage(new Message(Role.SYSTEM, options.systemPrompt())));
-            }
-            promptTokens.addAll(chatFormat.encodeMessage(new Message(Role.USER, prompt)));
-            promptTokens.addAll(chatFormat.encodeHeader(new Message(Role.MODEL, "")));
-        }
-
-        Set<Integer> stopTokens = chatFormat.getStopTokens();
-        IntConsumer printer = streamingPrinter(model.tokenizer(), options);
-        List<Integer> responseTokens = Llama.generateTokens(model, state, 0, promptTokens, stopTokens, options.maxTokens(), sampler, options.echo(), options.colors(), printer);
-        if (!responseTokens.isEmpty() && stopTokens.contains(responseTokens.getLast())) {
-            responseTokens.removeLast();
-        }
-        List<Integer> visibleResponseTokens = visibleTokens(model.tokenizer(), responseTokens, options.think());
-        if (!options.stream()) {
-            String responseText = model.tokenizer().decode(visibleResponseTokens);
-            System.out.println(responseText);
-        }
-    }
-
-    public static void main(String[] args) throws IOException {
-        Options options = Options.parseOptions(args);
-        Llama model = AOT.tryUsePreLoaded(options.modelPath(), options.maxTokens());
-        if (model == null) {
-            model = ModelLoader.loadModel(options.modelPath(), options.maxTokens());
-        }
-        Sampler sampler = selectSampler(model.configuration().vocabularySize, options.temperature(), options.topp(), options.seed());
-        if (options.interactive()) {
-            runInteractive(model, sampler, options);
-        } else {
-            runInstructOnce(model, sampler, options);
-        }
-    }
+  }
 }

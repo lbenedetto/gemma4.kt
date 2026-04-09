@@ -1,86 +1,87 @@
-package com.llama4j.sampler;
+package com.llama4j.sampler
 
-import com.llama4j.floattensor.FloatTensor;
+import com.llama4j.floattensor.FloatTensor
+import java.util.function.ToDoubleFunction
+import java.util.random.RandomGenerator
 
-import java.util.Comparator;
-import java.util.random.RandomGenerator;
+class ToppSampler(maxNumberOfElements: Int, topp: Float, rng: RandomGenerator) : Sampler {
+  val indices: IntArray
+  val topp: Float
+  val rng: RandomGenerator
 
-public final class ToppSampler implements Sampler {
+  init {
+    this.indices = IntArray(maxNumberOfElements)
+    this.topp = topp
+    this.rng = rng
+  }
 
-    final int[] indices;
-    final float topp;
-    final RandomGenerator rng;
+  override fun sampleToken(logits: FloatTensor): Int {
+    val comparator =
+      Comparator.comparingDouble<Int>(ToDoubleFunction { i: Int -> logits.getFloat(i.toLong()) }).reversed()
 
-    public ToppSampler(int maxNumberOfElements, float topp, RandomGenerator rng) {
-        this.indices = new int[maxNumberOfElements];
-        this.topp = topp;
-        this.rng = rng;
+    val n = Math.toIntExact(logits.size())
+    var head = 0
+    var tail = n - 1
+    val cutoff = (1.0f - topp) / (n - 1)
+    for (i in indices.indices) {
+      if (logits.getFloat(i.toLong()) >= cutoff) {
+        indices[head++] = i
+      } else {
+        indices[tail--] = i
+      }
     }
 
-    static void swap(int[] array, int from, int to) {
-        int tmp = array[from];
-        array[from] = array[to];
-        array[to] = tmp;
+    val n0 = head
+    for (i in n0 / 2 - 1 downTo 0) {
+      siftDown(indices, i, n0, comparator)
     }
 
-    static void siftDown(int[] array, int from, int n, Comparator<Integer> comparator) {
-        int prev = from, next;
-        while ((next = 2 * prev + 1) < n) {
-            int r = 2 * prev + 2;
-            if (r < n && comparator.compare(array[r], array[next]) < 0) {
-                next = r;
-            }
-            if (comparator.compare(array[next], array[prev]) < 0) {
-                swap(array, prev, next);
-                prev = next;
-            } else {
-                break;
-            }
-        }
+    var cumulativeProb = 0.0f
+    var lastIndex = 0
+    for (i in n0 - 1 downTo 0) {
+      swap(indices, 0, i)
+      cumulativeProb += logits.getFloat(indices[i].toLong())
+      if (cumulativeProb > topp) {
+        lastIndex = i
+        break
+      }
+      siftDown(indices, 0, i - 1, comparator)
     }
 
-    @Override
-    public int sampleToken(FloatTensor logits) {
-        Comparator<Integer> comparator = Comparator.comparingDouble((Integer i) -> logits.getFloat(i)).reversed();
-
-        int n = Math.toIntExact(logits.size());
-        int head = 0;
-        int tail = n - 1;
-        float cutoff = (1.0f - topp) / (n - 1);
-        for (int i = 0; i < indices.length; i++) {
-            if (logits.getFloat(i) >= cutoff) {
-                indices[head++] = i;
-            } else {
-                indices[tail--] = i;
-            }
-        }
-
-        int n0 = head;
-        for (int i = n0 / 2 - 1; i >= 0; --i) {
-            siftDown(indices, i, n0, comparator);
-        }
-
-        float cumulativeProb = 0.0f;
-        int lastIndex = 0;
-        for (int i = n0 - 1; i >= 0; i--) {
-            swap(indices, 0, i);
-            cumulativeProb += logits.getFloat(indices[i]);
-            if (cumulativeProb > topp) {
-                lastIndex = i;
-                break;
-            }
-            siftDown(indices, 0, i - 1, comparator);
-        }
-
-        float r = rng.nextFloat(1f) * cumulativeProb;
-        float cdf = 0.0f;
-        for (int i = n0 - 1; i >= lastIndex; i--) {
-            cdf += logits.getFloat(indices[i]);
-            if (r < cdf) {
-                return indices[i];
-            }
-        }
-
-        return indices[lastIndex];
+    val r = rng.nextFloat(1f) * cumulativeProb
+    var cdf = 0.0f
+    for (i in n0 - 1 downTo lastIndex) {
+      cdf += logits.getFloat(indices[i].toLong())
+      if (r < cdf) {
+        return indices[i]
+      }
     }
+
+    return indices[lastIndex]
+  }
+
+  companion object {
+    fun swap(array: IntArray, from: Int, to: Int) {
+      val tmp = array[from]
+      array[from] = array[to]
+      array[to] = tmp
+    }
+
+    fun siftDown(array: IntArray, from: Int, n: Int, comparator: Comparator<Int>) {
+      var prev = from
+      var next: Int
+      while (((2 * prev + 1).also { next = it }) < n) {
+        val r = 2 * prev + 2
+        if (r < n && comparator.compare(array[r], array[next]) < 0) {
+          next = r
+        }
+        if (comparator.compare(array[next], array[prev]) < 0) {
+          swap(array, prev, next)
+          prev = next
+        } else {
+          break
+        }
+      }
+    }
+  }
 }

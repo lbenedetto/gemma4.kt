@@ -1,4 +1,4 @@
-package com.llama4j.model;
+package com.llama4j.model
 
-public record Message(Role role, String content) {
-}
+@JvmRecord
+data class Message(val role: Role, val content: String)

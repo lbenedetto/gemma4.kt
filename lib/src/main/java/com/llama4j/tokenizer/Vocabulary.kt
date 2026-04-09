@@ -1,33 +1,43 @@
-package com.llama4j.tokenizer;
+package com.llama4j.tokenizer
 
-import java.util.Map;
-import java.util.OptionalInt;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
+import java.util.*
+import java.util.function.Function
+import java.util.stream.Collectors
+import java.util.stream.IntStream
 
-public record Vocabulary(String[] tokens, float[] scores, Map<String, Integer> tokenToIndex) {
-    public Vocabulary(String[] vocabulary, float[] scores) {
-        this(vocabulary, scores,
-                IntStream.range(0, vocabulary.length)
-                        .boxed()
-                        .collect(Collectors.toMap(i -> vocabulary[i], i -> i))
-        );
-    }
+@JvmRecord
+data class Vocabulary(tokens: Array<String>, scores: FloatArray, tokenToIndex: MutableMap<String, Int>) {
+  constructor(vocabulary: Array<String>, scores: FloatArray) : this(
+    vocabulary, scores,
+    IntStream.range(0, vocabulary.size)
+      .boxed()
+      .collect(Collectors.toMap(Function { i: Int? -> vocabulary[i!!] }, Function { i: Int? -> i }))
+  )
 
-    public String get(int tokenIndex) {
-        return tokens[tokenIndex];
-    }
+  fun get(tokenIndex: Int): String {
+    return tokens[tokenIndex]
+  }
 
-    public OptionalInt getIndex(String token) {
-        Integer value = tokenToIndex.get(token);
-        return value != null ? OptionalInt.of(value) : OptionalInt.empty();
-    }
+  fun getIndex(token: String): OptionalInt {
+    val value = tokenToIndex.get(token)
+    return if (value != null) OptionalInt.of(value) else OptionalInt.empty()
+  }
 
-    public int size() {
-        return tokens.length;
-    }
+  fun size(): Int {
+    return tokens.size
+  }
 
-    public float getScore(int tokenIndex) {
-        return scores[tokenIndex];
-    }
+  fun getScore(tokenIndex: Int): Float {
+    return scores[tokenIndex]
+  }
+
+  val tokens: Array<String>
+  val scores: FloatArray
+  val tokenToIndex: MutableMap<String, Int>
+
+  init {
+    this.tokens = tokens
+    this.scores = scores
+    this.tokenToIndex = tokenToIndex
+  }
 }

@@ -1,12 +1,14 @@
-package com.llama4j.model;
+package com.llama4j.model
 
-public record Role(String name) {
-  public static Role SYSTEM = new Role("system");
-  public static Role USER = new Role("user");
-  public static Role MODEL = new Role("model");
+@JvmRecord
+data class Role(val name: String) {
+  override fun toString(): String {
+    return name
+  }
 
-  @Override
-  public String toString() {
-    return name;
+  companion object {
+    var SYSTEM: Role = Role("system")
+    var USER: Role = Role("user")
+    var MODEL: Role = Role("model")
   }
 }

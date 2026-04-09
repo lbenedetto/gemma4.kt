@@ -1,9 +1,9 @@
-package com.llama4j.gguf;
+package com.llama4j.gguf
 
-public record GGUFTensorInfo(
-    String name,
-    int[] dimensions,
-    GGMLType ggmlType,
-    long offset
-) {
-}
+@JvmRecord
+data class GGUFTensorInfo(
+  val name: String,
+  val dimensions: IntArray,
+  val ggmlType: GGMLType,
+  val offset: Long
+)

@@ -1,165 +1,218 @@
-package com.llama4j.floattensor;
+package com.llama4j.floattensor
 
-import com.llama4j.gguf.GGMLType;
-import jdk.incubator.vector.ByteVector;
-import jdk.incubator.vector.FloatVector;
-import jdk.incubator.vector.VectorOperators;
-import jdk.incubator.vector.VectorSpecies;
+import com.llama4j.gguf.GGMLType
+import jdk.incubator.vector.ByteVector
+import jdk.incubator.vector.FloatVector
+import jdk.incubator.vector.VectorOperators
+import jdk.incubator.vector.VectorSpecies
+import java.lang.Byte
+import java.lang.foreign.MemorySegment
+import java.nio.ByteOrder
+import java.util.*
+import kotlin.Float
+import kotlin.Int
+import kotlin.Long
+import kotlin.UnsupportedOperationException
+import kotlin.assert
+import kotlin.math.min
+import kotlin.toString
 
-import java.lang.foreign.MemorySegment;
-import java.nio.ByteOrder;
+internal class Q5_KFloatTensor(size: Long, memorySegment: MemorySegment) : FloatTensor() {
+  val size: Long
+  val memorySegment: MemorySegment
 
-import static java.util.Objects.requireNonNull;
+  init {
+    this.size = size
+    this.memorySegment = memorySegment
+  }
 
-final class Q5_KFloatTensor extends FloatTensor {
+  override fun size(): Long {
+    return size
+  }
 
-    static final int BLOCK_SIZE = GGMLType.QK_K;
-    static final int TYPE_SIZE = GGMLType.Q5_K.getTypeSize();
+  override fun setFloat(index: Int, value: Float) {
+    throw UnsupportedOperationException("setFloat")
+  }
 
-    final long size;
-    final MemorySegment memorySegment;
+  override fun getFloatVector(species: VectorSpecies<Float>, index: Int): FloatVector? {
+    throw UnsupportedOperationException("getFloatVector")
+  }
 
-    public Q5_KFloatTensor(long size, MemorySegment memorySegment) {
-        this.size = size;
-        this.memorySegment = memorySegment;
+  public override fun type(): GGMLType {
+    return GGMLType.Q5_K
+  }
+
+  override fun getFloat(index: Long): Float {
+    val blockIndex: Long = index / BLOCK_SIZE
+    val withinBlock = (index % BLOCK_SIZE).toInt()
+    val blockOffset: Long = blockIndex * TYPE_SIZE
+    val d: Float = FloatTensor.Companion.readFloat16(memorySegment, blockOffset)
+    val dmin: Float = FloatTensor.Companion.readFloat16(memorySegment, blockOffset + 2)
+    val scalesOffset = blockOffset + 4
+    val qhOffset = blockOffset + 16 // 4 + 12
+    val qsOffset = blockOffset + 48 // 4 + 12 + 32
+
+    val group = withinBlock / 64
+    val inGroup = withinBlock % 64
+    val isHigh = inGroup >= 32
+    val l = if (isHigh) inGroup - 32 else inGroup
+    val subBlock = if (isHigh) group * 2 + 1 else group * 2
+
+    val sc: Int = Q4_KFloatTensor.Companion.getScaleMinK4(subBlock, memorySegment, scalesOffset, false)
+    val m: Int = Q4_KFloatTensor.Companion.getScaleMinK4(subBlock, memorySegment, scalesOffset, true)
+
+    val qsByte: Byte = FloatTensor.Companion.readByte(memorySegment, qsOffset + group * 32 + l)
+    val nibble = if (isHigh) ((Byte.toUnsignedInt(qsByte) shr 4) and 0xF) else (Byte.toUnsignedInt(qsByte) and 0xF)
+
+    val qhBitPos = if (isHigh) 2 * group + 1 else 2 * group
+    val qhBit = (Byte.toUnsignedInt(FloatTensor.Companion.readByte(memorySegment, qhOffset + l)) shr qhBitPos) and 1
+
+    val quant = nibble or (qhBit shl 4)
+    return d * sc * quant - dmin * m
+  }
+
+  override fun dot(thisOffset: Int, that: FloatTensor, thatOffset: Int, size: Int): Float {
+    if (FloatTensor.Companion.USE_VECTOR_API) {
+      return vectorDot(this, thisOffset, that as ArrayFloatTensor, thatOffset, size)
+    } else {
+      return FloatTensor.Companion.scalarDot(this, thisOffset, that, thatOffset, size)
     }
+  }
 
-    @Override public long size() { return size; }
-    @Override public void setFloat(int index, float value) { throw new UnsupportedOperationException("setFloat"); }
-    @Override
-    FloatVector getFloatVector(VectorSpecies<Float> species, int index) { throw new UnsupportedOperationException("getFloatVector"); }
-    @Override public GGMLType type() { return GGMLType.Q5_K; }
+  companion object {
+    val BLOCK_SIZE: Int = GGMLType.Companion.QK_K
+    val TYPE_SIZE: Int = GGMLType.Q5_K.getTypeSize()
 
-    @Override
-    public float getFloat(long index) {
-        long blockIndex = index / BLOCK_SIZE;
-        int withinBlock = (int) (index % BLOCK_SIZE);
-        long blockOffset = blockIndex * TYPE_SIZE;
-        float d = readFloat16(memorySegment, blockOffset);
-        float dmin = readFloat16(memorySegment, blockOffset + 2);
-        long scalesOffset = blockOffset + 4;
-        long qhOffset = blockOffset + 16;  // 4 + 12
-        long qsOffset = blockOffset + 48;  // 4 + 12 + 32
+    private fun vectorDot(
+      thiz: Q5_KFloatTensor,
+      thisOffset: Int,
+      that: ArrayFloatTensor,
+      thatOffset: Int,
+      size: Int
+    ): Float {
+      var result = 0f
+      var j = 0
 
-        int group = withinBlock / 64;
-        int inGroup = withinBlock % 64;
-        boolean isHigh = inGroup >= 32;
-        int l = isHigh ? inGroup - 32 : inGroup;
-        int subBlock = isHigh ? group * 2 + 1 : group * 2;
+      assert(Integer.bitCount(BLOCK_SIZE) == 1) { "power of 2" }
+      val alignmentBound = min(size, -thisOffset and (BLOCK_SIZE - 1))
+      if (alignmentBound > 0) {
+        result += FloatTensor.Companion.scalarDot(thiz, thisOffset, that, thatOffset, alignmentBound)
+        j += alignmentBound
+      }
 
-        int sc = Q4_KFloatTensor.getScaleMinK4(subBlock, memorySegment, scalesOffset, false);
-        int m = Q4_KFloatTensor.getScaleMinK4(subBlock, memorySegment, scalesOffset, true);
+      var `val` = FloatVector.zero(Objects.requireNonNull<VectorSpecies<Float>?>(FloatTensor.Companion.F_SPECIES))
+      var val2 = FloatVector.zero(FloatTensor.Companion.F_SPECIES)
+      var blockOffset: Long = (thisOffset + j).toLong() / BLOCK_SIZE * TYPE_SIZE
+      val upperBound: Int = j + (size - j) / BLOCK_SIZE * BLOCK_SIZE
 
-        byte qsByte = readByte(memorySegment, qsOffset + group * 32 + l);
-        int nibble = isHigh ? ((Byte.toUnsignedInt(qsByte) >> 4) & 0xF) : (Byte.toUnsignedInt(qsByte) & 0xF);
+      while (j < upperBound) {
+        val d: Float = FloatTensor.Companion.readFloat16(thiz.memorySegment, blockOffset)
+        val dmin: Float = FloatTensor.Companion.readFloat16(thiz.memorySegment, blockOffset + 2)
+        val scalesOff = blockOffset + 4
+        val qhOff = blockOffset + 16
+        val qsOff = blockOffset + 48
+        val qh0 =
+          ByteVector.fromMemorySegment(ByteVector.SPECIES_128, thiz.memorySegment, qhOff, ByteOrder.LITTLE_ENDIAN)
+        val qh1 =
+          ByteVector.fromMemorySegment(ByteVector.SPECIES_128, thiz.memorySegment, qhOff + 16, ByteOrder.LITTLE_ENDIAN)
 
-        int qhBitPos = isHigh ? 2 * group + 1 : 2 * group;
-        int qhBit = (Byte.toUnsignedInt(readByte(memorySegment, qhOffset + l)) >> qhBitPos) & 1;
+        for (g in 0..3) {
+          val loSubBlock = g * 2
+          val hiSubBlock = loSubBlock + 1
+          val d1: Float = d * Q4_KFloatTensor.Companion.getScaleMinK4(loSubBlock, thiz.memorySegment, scalesOff, false)
+          val m1: Float =
+            dmin * Q4_KFloatTensor.Companion.getScaleMinK4(loSubBlock, thiz.memorySegment, scalesOff, true)
+          val d2: Float = d * Q4_KFloatTensor.Companion.getScaleMinK4(hiSubBlock, thiz.memorySegment, scalesOff, false)
+          val m2: Float =
+            dmin * Q4_KFloatTensor.Companion.getScaleMinK4(hiSubBlock, thiz.memorySegment, scalesOff, true)
+          val qhBitPosLo = 2 * g
+          val qhBitPosHi = qhBitPosLo + 1
+          val groupQsOff = qsOff + g.toLong() * 32
+          val d1Vec = FloatVector.broadcast(FloatTensor.Companion.F_SPECIES, d1)
+          val d2Vec = FloatVector.broadcast(FloatTensor.Companion.F_SPECIES, d2)
+          val negM1Vec = FloatVector.broadcast(FloatTensor.Companion.F_SPECIES, -m1)
+          val negM2Vec = FloatVector.broadcast(FloatTensor.Companion.F_SPECIES, -m2)
 
-        int quant = nibble | (qhBit << 4);
-        return d * sc * quant - dmin * m;
-    }
+          for (c in 0..1) {
+            val loBase = thatOffset + j + g * 64 + c * 16
+            val hiBase = thatOffset + j + g * 64 + 32 + c * 16
 
-    @Override
-    public float dot(int thisOffset, FloatTensor that, int thatOffset, int size) {
-        if (FloatTensor.USE_VECTOR_API) {
-            return vectorDot(this, thisOffset, (ArrayFloatTensor) that, thatOffset, size);
-        } else {
-            return FloatTensor.scalarDot(this, thisOffset, that, thatOffset, size);
-        }
-    }
+            val wBytes = ByteVector.fromMemorySegment(
+              ByteVector.SPECIES_128, thiz.memorySegment,
+              groupQsOff + c * 16L, ByteOrder.LITTLE_ENDIAN
+            )
+            var loQ = wBytes.and(0xF.toByte())
+            var hiQ: ByteVector = wBytes.lanewise(VectorOperators.LSHR, 4)
 
-    private static float vectorDot(Q5_KFloatTensor thiz, int thisOffset, ArrayFloatTensor that, int thatOffset, int size) {
-        float result = 0f;
-        int j = 0;
+            val qhBytes = if (c == 0) qh0 else qh1
+            loQ = loQ.or(
+              qhBytes.lanewise(VectorOperators.LSHR, qhBitPosLo.toLong()).and(1.toByte())
+                .lanewise(VectorOperators.LSHL, 4)
+            )
+            hiQ = hiQ.or(
+              qhBytes.lanewise(VectorOperators.LSHR, qhBitPosHi.toLong()).and(1.toByte())
+                .lanewise(VectorOperators.LSHL, 4)
+            )
 
-        assert Integer.bitCount(BLOCK_SIZE) == 1 : "power of 2";
-        int alignmentBound = Math.min(size, -thisOffset & (BLOCK_SIZE - 1));
-        if (alignmentBound > 0) {
-            result += FloatTensor.scalarDot(thiz, thisOffset, that, thatOffset, alignmentBound);
-            j += alignmentBound;
-        }
+            when (FloatTensor.Companion.F_SPECIES.vectorBitSize()) {
+              512 -> {
+                val loQf = loQ.castShape<Float>(FloatTensor.Companion.F_SPECIES, 0).reinterpretAsFloats()
+                val hiQf = hiQ.castShape<Float>(FloatTensor.Companion.F_SPECIES, 0).reinterpretAsFloats()
+                `val` =
+                  loQf.fma(d1Vec, negM1Vec).fma(that.getFloatVector(FloatTensor.Companion.F_SPECIES, loBase), `val`)
+                val2 = hiQf.fma(d2Vec, negM2Vec).fma(that.getFloatVector(FloatTensor.Companion.F_SPECIES, hiBase), val2)
+              }
 
-        FloatVector val = FloatVector.zero(requireNonNull(F_SPECIES));
-        FloatVector val2 = FloatVector.zero(F_SPECIES);
-        long blockOffset = (long) (thisOffset + j) / BLOCK_SIZE * TYPE_SIZE;
-        int upperBound = j + (size - j) / BLOCK_SIZE * BLOCK_SIZE;
+              256 -> {
+                val loQf0 = loQ.castShape<Float>(FloatTensor.Companion.F_SPECIES, 0).reinterpretAsFloats()
+                val loQf1 = loQ.castShape<Float>(FloatTensor.Companion.F_SPECIES, 1).reinterpretAsFloats()
+                val hiQf0 = hiQ.castShape<Float>(FloatTensor.Companion.F_SPECIES, 0).reinterpretAsFloats()
+                val hiQf1 = hiQ.castShape<Float>(FloatTensor.Companion.F_SPECIES, 1).reinterpretAsFloats()
+                `val` =
+                  loQf0.fma(d1Vec, negM1Vec).fma(that.getFloatVector(FloatTensor.Companion.F_SPECIES, loBase), `val`)
+                `val` = loQf1.fma(d1Vec, negM1Vec).fma(
+                  that.getFloatVector(
+                    FloatTensor.Companion.F_SPECIES,
+                    loBase + FloatTensor.Companion.F_SPECIES.length()
+                  ), `val`
+                )
+                val2 =
+                  hiQf0.fma(d2Vec, negM2Vec).fma(that.getFloatVector(FloatTensor.Companion.F_SPECIES, hiBase), val2)
+                val2 = hiQf1.fma(d2Vec, negM2Vec).fma(
+                  that.getFloatVector(
+                    FloatTensor.Companion.F_SPECIES,
+                    hiBase + FloatTensor.Companion.F_SPECIES.length()
+                  ), val2
+                )
+              }
 
-        for (; j < upperBound; j += BLOCK_SIZE, blockOffset += TYPE_SIZE) {
-            float d = readFloat16(thiz.memorySegment, blockOffset);
-            float dmin = readFloat16(thiz.memorySegment, blockOffset + 2);
-            long scalesOff = blockOffset + 4;
-            long qhOff = blockOffset + 16;
-            long qsOff = blockOffset + 48;
-            var qh0 = ByteVector.fromMemorySegment(ByteVector.SPECIES_128, thiz.memorySegment, qhOff, ByteOrder.LITTLE_ENDIAN);
-            var qh1 = ByteVector.fromMemorySegment(ByteVector.SPECIES_128, thiz.memorySegment, qhOff + 16, ByteOrder.LITTLE_ENDIAN);
-
-            for (int g = 0; g < 4; g++) {
-                int loSubBlock = g * 2;
-                int hiSubBlock = loSubBlock + 1;
-                float d1 = d * Q4_KFloatTensor.getScaleMinK4(loSubBlock, thiz.memorySegment, scalesOff, false);
-                float m1 = dmin * Q4_KFloatTensor.getScaleMinK4(loSubBlock, thiz.memorySegment, scalesOff, true);
-                float d2 = d * Q4_KFloatTensor.getScaleMinK4(hiSubBlock, thiz.memorySegment, scalesOff, false);
-                float m2 = dmin * Q4_KFloatTensor.getScaleMinK4(hiSubBlock, thiz.memorySegment, scalesOff, true);
-                int qhBitPosLo = 2 * g;
-                int qhBitPosHi = qhBitPosLo + 1;
-                long groupQsOff = qsOff + (long) g * 32;
-                var d1Vec = FloatVector.broadcast(F_SPECIES, d1);
-                var d2Vec = FloatVector.broadcast(F_SPECIES, d2);
-                var negM1Vec = FloatVector.broadcast(F_SPECIES, -m1);
-                var negM2Vec = FloatVector.broadcast(F_SPECIES, -m2);
-
-                for (int c = 0; c < 2; c++) {
-                    int loBase = thatOffset + j + g * 64 + c * 16;
-                    int hiBase = thatOffset + j + g * 64 + 32 + c * 16;
-
-                    var wBytes = ByteVector.fromMemorySegment(ByteVector.SPECIES_128, thiz.memorySegment,
-                            groupQsOff + c * 16L, ByteOrder.LITTLE_ENDIAN);
-                    var loQ = wBytes.and((byte) 0xF);
-                    var hiQ = wBytes.lanewise(VectorOperators.LSHR, 4);
-
-                    var qhBytes = c == 0 ? qh0 : qh1;
-                    loQ = loQ.or(qhBytes.lanewise(VectorOperators.LSHR, qhBitPosLo).and((byte) 1).lanewise(VectorOperators.LSHL, 4));
-                    hiQ = hiQ.or(qhBytes.lanewise(VectorOperators.LSHR, qhBitPosHi).and((byte) 1).lanewise(VectorOperators.LSHL, 4));
-
-                    switch (F_SPECIES.vectorBitSize()) {
-                        case 512 -> {
-                            var loQf = loQ.castShape(F_SPECIES, 0).reinterpretAsFloats();
-                            var hiQf = hiQ.castShape(F_SPECIES, 0).reinterpretAsFloats();
-                            val = loQf.fma(d1Vec, negM1Vec).fma(that.getFloatVector(F_SPECIES, loBase), val);
-                            val2 = hiQf.fma(d2Vec, negM2Vec).fma(that.getFloatVector(F_SPECIES, hiBase), val2);
-                        }
-                        case 256 -> {
-                            var loQf0 = loQ.castShape(F_SPECIES, 0).reinterpretAsFloats();
-                            var loQf1 = loQ.castShape(F_SPECIES, 1).reinterpretAsFloats();
-                            var hiQf0 = hiQ.castShape(F_SPECIES, 0).reinterpretAsFloats();
-                            var hiQf1 = hiQ.castShape(F_SPECIES, 1).reinterpretAsFloats();
-                            val = loQf0.fma(d1Vec, negM1Vec).fma(that.getFloatVector(F_SPECIES, loBase), val);
-                            val = loQf1.fma(d1Vec, negM1Vec).fma(that.getFloatVector(F_SPECIES, loBase + F_SPECIES.length()), val);
-                            val2 = hiQf0.fma(d2Vec, negM2Vec).fma(that.getFloatVector(F_SPECIES, hiBase), val2);
-                            val2 = hiQf1.fma(d2Vec, negM2Vec).fma(that.getFloatVector(F_SPECIES, hiBase + F_SPECIES.length()), val2);
-                        }
-                        case 128 -> {
-                            for (int p = 0; p < 4; p++) {
-                                int off = p * F_SPECIES.length();
-                                var loQf = loQ.castShape(F_SPECIES, p).reinterpretAsFloats();
-                                var hiQf = hiQ.castShape(F_SPECIES, p).reinterpretAsFloats();
-                                val = loQf.fma(d1Vec, negM1Vec).fma(that.getFloatVector(F_SPECIES, loBase + off), val);
-                                val2 = hiQf.fma(d2Vec, negM2Vec).fma(that.getFloatVector(F_SPECIES, hiBase + off), val2);
-                            }
-                        }
-                        default -> throw new UnsupportedOperationException(F_SPECIES.toString());
-                    }
+              128 -> {
+                for (p in 0..3) {
+                  val off: Int = p * FloatTensor.Companion.F_SPECIES.length()
+                  val loQf = loQ.castShape<Float>(FloatTensor.Companion.F_SPECIES, p).reinterpretAsFloats()
+                  val hiQf = hiQ.castShape<Float>(FloatTensor.Companion.F_SPECIES, p).reinterpretAsFloats()
+                  `val` = loQf.fma(d1Vec, negM1Vec)
+                    .fma(that.getFloatVector(FloatTensor.Companion.F_SPECIES, loBase + off), `val`)
+                  val2 = hiQf.fma(d2Vec, negM2Vec)
+                    .fma(that.getFloatVector(FloatTensor.Companion.F_SPECIES, hiBase + off), val2)
                 }
+              }
+
+              else -> throw UnsupportedOperationException(FloatTensor.Companion.F_SPECIES.toString())
             }
+          }
         }
+        j += BLOCK_SIZE
+        blockOffset += TYPE_SIZE.toLong()
+      }
 
-        result += val.add(val2).reduceLanes(VectorOperators.ADD);
+      result += `val`.add(val2).reduceLanes(VectorOperators.ADD)
 
-        if (j < size) {
-            result += FloatTensor.scalarDot(thiz, thisOffset + j, that, thatOffset + j, size - j);
-        }
+      if (j < size) {
+        result += FloatTensor.Companion.scalarDot(thiz, thisOffset + j, that, thatOffset + j, size - j)
+      }
 
-        return result;
+      return result
     }
+  }
 }

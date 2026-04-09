@@ -1,117 +1,161 @@
-package com.llama4j.floattensor;
+package com.llama4j.floattensor
 
-import com.llama4j.gguf.GGMLType;
-import jdk.incubator.vector.ByteVector;
-import jdk.incubator.vector.FloatVector;
-import jdk.incubator.vector.VectorOperators;
-import jdk.incubator.vector.VectorSpecies;
+import com.llama4j.gguf.GGMLType
+import jdk.incubator.vector.ByteVector
+import jdk.incubator.vector.FloatVector
+import jdk.incubator.vector.VectorOperators
+import jdk.incubator.vector.VectorSpecies
+import java.lang.foreign.MemorySegment
+import java.nio.ByteOrder
+import java.util.*
+import kotlin.math.min
 
-import java.lang.foreign.MemorySegment;
-import java.nio.ByteOrder;
+internal class Q8_0FloatTensor(size: Long, memorySegment: MemorySegment) : FloatTensor() {
+  val size: Long
+  val memorySegment: MemorySegment
 
-import static java.util.Objects.requireNonNull;
+  init {
+    this.size = size
+    this.memorySegment = memorySegment
+  }
 
-final class Q8_0FloatTensor extends FloatTensor {
+  override fun size(): Long {
+    return size
+  }
 
-    final long size;
-    final MemorySegment memorySegment;
+  override fun setFloat(index: Int, value: Float) {
+    throw UnsupportedOperationException("setFloat")
+  }
 
-    public Q8_0FloatTensor(long size, MemorySegment memorySegment) {
-        this.size = size;
-        this.memorySegment = memorySegment;
+  override fun getFloatVector(species: VectorSpecies<Float>, index: Int): FloatVector? {
+    throw UnsupportedOperationException("getFloatVector")
+  }
+
+  public override fun type(): GGMLType {
+    return GGMLType.Q8_0
+  }
+
+  override fun getFloat(index: Long): Float {
+    val blockIndex = index / GGMLType.Q8_0.getBlockSize()
+    val withinBlockIndex = index % GGMLType.Q8_0.getBlockSize()
+    val blockOffset = blockIndex * GGMLType.Q8_0.getTypeSize()
+    val quant: Byte = FloatTensor.Companion.readByte(memorySegment, blockOffset + Float16.BYTES + withinBlockIndex)
+    val scale: Float = FloatTensor.Companion.readFloat16(memorySegment, blockOffset)
+    return quant * scale
+  }
+
+  override fun dot(thisOffset: Int, that: FloatTensor, thatOffset: Int, size: Int): Float {
+    if (FloatTensor.Companion.USE_VECTOR_API) {
+      return vectorDot(this, thisOffset, that as ArrayFloatTensor, thatOffset, size)
+    } else {
+      return FloatTensor.Companion.scalarDot(this, thisOffset, that, thatOffset, size)
     }
+  }
 
-    @Override
-    public long size() {
-        return size;
-    }
+  companion object {
+    private fun vectorDot(
+      thiz: Q8_0FloatTensor,
+      thisOffset: Int,
+      that: ArrayFloatTensor,
+      thatOffset: Int,
+      size: Int
+    ): Float {
+      var result = 0f
+      var j = 0
 
-    @Override
-    public void setFloat(int index, float value) {
-        throw new UnsupportedOperationException("setFloat");
-    }
+      assert(Integer.bitCount(GGMLType.Q8_0.getBlockSize()) == 1) { "power of 2" }
+      val alignmentBound = min(size, -thisOffset and (GGMLType.Q8_0.getBlockSize() - 1))
+      if (alignmentBound > 0) {
+        result += FloatTensor.Companion.scalarDot(thiz, thisOffset, that, thatOffset, alignmentBound)
+        j += alignmentBound
+      }
+      assert((thisOffset + j) % GGMLType.Q8_0.getBlockSize() == 0)
 
-    @Override
-    FloatVector getFloatVector(VectorSpecies<Float> species, int index) {
-        throw new UnsupportedOperationException("getFloatVector");
-    }
+      var `val` = FloatVector.zero(Objects.requireNonNull<VectorSpecies<Float>?>(FloatTensor.Companion.F_SPECIES))
+      var blockOffset = (thisOffset + j).toLong() / GGMLType.Q8_0.getBlockSize() * GGMLType.Q8_0.getTypeSize()
+      val upperBound = j + (size - j) / GGMLType.Q8_0.getBlockSize() * GGMLType.Q8_0.getBlockSize()
+      while (j < upperBound) {
+        val wScaleValue: Float = FloatTensor.Companion.readFloat16(thiz.memorySegment, blockOffset)
+        val wScale = FloatVector.broadcast(FloatTensor.Companion.F_SPECIES, wScaleValue)
+        when (FloatTensor.Companion.F_SPECIES.vectorBitSize()) {
+          512 -> {
+            val wBytes = ByteVector.fromMemorySegment(
+              ByteVector.SPECIES_256,
+              thiz.memorySegment,
+              blockOffset + Float16.BYTES,
+              ByteOrder.LITTLE_ENDIAN
+            )
+            val s0 = that.getFloatVector(FloatTensor.Companion.F_SPECIES, thatOffset + j)
+              .mul(wBytes.castShape<Float>(FloatTensor.Companion.F_SPECIES, 0))
+            val s1 = that.getFloatVector(
+              FloatTensor.Companion.F_SPECIES,
+              thatOffset + j + FloatTensor.Companion.F_SPECIES.length()
+            ).mul(wBytes.castShape<Float>(FloatTensor.Companion.F_SPECIES, 1))
+            `val` = s0.add(s1).fma(wScale, `val`)
+          }
 
-    @Override
-    public GGMLType type() {
-        return GGMLType.Q8_0;
-    }
+          256 -> {
+            val wBytes = ByteVector.fromMemorySegment(
+              ByteVector.SPECIES_256,
+              thiz.memorySegment,
+              blockOffset + Float16.BYTES,
+              ByteOrder.LITTLE_ENDIAN
+            )
+            var s0 = that.getFloatVector(FloatTensor.Companion.F_SPECIES, thatOffset + j)
+              .mul(wBytes.castShape<Float>(FloatTensor.Companion.F_SPECIES, 0))
+            var s1 = that.getFloatVector(
+              FloatTensor.Companion.F_SPECIES,
+              thatOffset + j + 2 * FloatTensor.Companion.F_SPECIES.length()
+            ).mul(wBytes.castShape<Float>(FloatTensor.Companion.F_SPECIES, 2))
+            s0 = that.getFloatVector(
+              FloatTensor.Companion.F_SPECIES,
+              thatOffset + j + FloatTensor.Companion.F_SPECIES.length()
+            ).fma(wBytes.castShape<Float>(FloatTensor.Companion.F_SPECIES, 1), s0)
+            s1 = that.getFloatVector(
+              FloatTensor.Companion.F_SPECIES,
+              thatOffset + j + 3 * FloatTensor.Companion.F_SPECIES.length()
+            ).fma(wBytes.castShape<Float>(FloatTensor.Companion.F_SPECIES, 3), s1)
+            `val` = s0.add(s1).fma(wScale, `val`)
+          }
 
-    @Override
-    public float getFloat(long index) {
-        long blockIndex = index / GGMLType.Q8_0.getBlockSize();
-        long withinBlockIndex = index % GGMLType.Q8_0.getBlockSize();
-        long blockOffset = blockIndex * GGMLType.Q8_0.getTypeSize();
-        byte quant = readByte(memorySegment, blockOffset + Float16.BYTES + withinBlockIndex);
-        float scale = readFloat16(memorySegment, blockOffset);
-        return quant * scale;
-    }
-
-    @Override
-    public float dot(int thisOffset, FloatTensor that, int thatOffset, int size) {
-        if (FloatTensor.USE_VECTOR_API) {
-            return vectorDot(this, thisOffset, (ArrayFloatTensor) that, thatOffset, size);
-        } else {
-            return FloatTensor.scalarDot(this, thisOffset, that, thatOffset, size);
-        }
-    }
-
-    private static float vectorDot(Q8_0FloatTensor thiz, int thisOffset, ArrayFloatTensor that, int thatOffset, int size) {
-        float result = 0f;
-        int j = 0;
-
-        assert Integer.bitCount(GGMLType.Q8_0.getBlockSize()) == 1 : "power of 2";
-        int alignmentBound = Math.min(size, -thisOffset & (GGMLType.Q8_0.getBlockSize() - 1));
-        if (alignmentBound > 0) {
-            result += FloatTensor.scalarDot(thiz, thisOffset, that, thatOffset, alignmentBound);
-            j += alignmentBound;
-        }
-        assert (thisOffset + j) % GGMLType.Q8_0.getBlockSize() == 0;
-
-        FloatVector val = FloatVector.zero(requireNonNull(F_SPECIES));
-        long blockOffset = (long) (thisOffset + j) / GGMLType.Q8_0.getBlockSize() * GGMLType.Q8_0.getTypeSize();
-        int upperBound = j + (size - j) / GGMLType.Q8_0.getBlockSize() * GGMLType.Q8_0.getBlockSize();
-        for (; j < upperBound; j += GGMLType.Q8_0.getBlockSize(), blockOffset += GGMLType.Q8_0.getTypeSize()) {
-            float wScaleValue = readFloat16(thiz.memorySegment, blockOffset);
-            var wScale = FloatVector.broadcast(F_SPECIES, wScaleValue);
-            switch (F_SPECIES.vectorBitSize()) {
-                case 512 -> {
-                    var wBytes = ByteVector.fromMemorySegment(ByteVector.SPECIES_256, thiz.memorySegment, blockOffset + Float16.BYTES, ByteOrder.LITTLE_ENDIAN);
-                    var s0 = that.getFloatVector(F_SPECIES, thatOffset + j).mul(wBytes.castShape(F_SPECIES, 0));
-                    var s1 = that.getFloatVector(F_SPECIES, thatOffset + j + F_SPECIES.length()).mul(wBytes.castShape(F_SPECIES, 1));
-                    val = s0.add(s1).fma(wScale, val);
-                }
-                case 256 -> {
-                    var wBytes = ByteVector.fromMemorySegment(ByteVector.SPECIES_256, thiz.memorySegment, blockOffset + Float16.BYTES, ByteOrder.LITTLE_ENDIAN);
-                    var s0 = that.getFloatVector(F_SPECIES, thatOffset + j).mul(wBytes.castShape(F_SPECIES, 0));
-                    var s1 = that.getFloatVector(F_SPECIES, thatOffset + j + 2 * F_SPECIES.length()).mul(wBytes.castShape(F_SPECIES, 2));
-                    s0 = that.getFloatVector(F_SPECIES, thatOffset + j + F_SPECIES.length()).fma(wBytes.castShape(F_SPECIES, 1), s0);
-                    s1 = that.getFloatVector(F_SPECIES, thatOffset + j + 3 * F_SPECIES.length()).fma(wBytes.castShape(F_SPECIES, 3), s1);
-                    val = s0.add(s1).fma(wScale, val);
-                }
-                case 128 -> {
-                    for (int i = 0; i < 2; ++i) {
-                        var wBytes = ByteVector.fromMemorySegment(ByteVector.SPECIES_128, thiz.memorySegment, blockOffset + Float16.BYTES + i * ByteVector.SPECIES_128.vectorByteSize(), ByteOrder.LITTLE_ENDIAN);
-                        var s0 = that.getFloatVector(F_SPECIES, thatOffset + j + i * 16).mul(wBytes.castShape(F_SPECIES, 0));
-                        var s1 = that.getFloatVector(F_SPECIES, thatOffset + j + i * 16 + 2 * F_SPECIES.length()).mul(wBytes.castShape(F_SPECIES, 2));
-                        s0 = that.getFloatVector(F_SPECIES, thatOffset + j + i * 16 + F_SPECIES.length()).fma(wBytes.castShape(F_SPECIES, 1), s0);
-                        s1 = that.getFloatVector(F_SPECIES, thatOffset + j + i * 16 + 3 * F_SPECIES.length()).fma(wBytes.castShape(F_SPECIES, 3), s1);
-                        val = s0.add(s1).fma(wScale, val);
-                    }
-                }
-                default -> throw new UnsupportedOperationException(F_SPECIES.toString());
+          128 -> {
+            for (i in 0..1) {
+              val wBytes = ByteVector.fromMemorySegment(
+                ByteVector.SPECIES_128,
+                thiz.memorySegment,
+                blockOffset + Float16.BYTES + i * ByteVector.SPECIES_128.vectorByteSize(),
+                ByteOrder.LITTLE_ENDIAN
+              )
+              var s0 = that.getFloatVector(FloatTensor.Companion.F_SPECIES, thatOffset + j + i * 16)
+                .mul(wBytes.castShape<Float>(FloatTensor.Companion.F_SPECIES, 0))
+              var s1 = that.getFloatVector(
+                FloatTensor.Companion.F_SPECIES,
+                thatOffset + j + i * 16 + 2 * FloatTensor.Companion.F_SPECIES.length()
+              ).mul(wBytes.castShape<Float>(FloatTensor.Companion.F_SPECIES, 2))
+              s0 = that.getFloatVector(
+                FloatTensor.Companion.F_SPECIES,
+                thatOffset + j + i * 16 + FloatTensor.Companion.F_SPECIES.length()
+              ).fma(wBytes.castShape<Float>(FloatTensor.Companion.F_SPECIES, 1), s0)
+              s1 = that.getFloatVector(
+                FloatTensor.Companion.F_SPECIES,
+                thatOffset + j + i * 16 + 3 * FloatTensor.Companion.F_SPECIES.length()
+              ).fma(wBytes.castShape<Float>(FloatTensor.Companion.F_SPECIES, 3), s1)
+              `val` = s0.add(s1).fma(wScale, `val`)
             }
-        }
-        result += val.reduceLanes(VectorOperators.ADD);
+          }
 
-        if (j < size) {
-            result += FloatTensor.scalarDot(thiz, thisOffset + j, that, thatOffset + j, size - j);
+          else -> throw UnsupportedOperationException(FloatTensor.Companion.F_SPECIES.toString())
         }
+        j += GGMLType.Q8_0.getBlockSize()
+        blockOffset += GGMLType.Q8_0.getTypeSize().toLong()
+      }
+      result += `val`.reduceLanes(VectorOperators.ADD)
 
-        return result;
+      if (j < size) {
+        result += FloatTensor.Companion.scalarDot(thiz, thisOffset + j, that, thatOffset + j, size - j)
+      }
+
+      return result
     }
+  }
 }

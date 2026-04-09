@@ -1,94 +1,95 @@
-package com.llama4j.floattensor;
+package com.llama4j.floattensor
 
-import com.llama4j.gguf.GGMLType;
-import jdk.incubator.vector.FloatVector;
-import jdk.incubator.vector.VectorOperators;
-import jdk.incubator.vector.VectorSpecies;
+import com.llama4j.gguf.GGMLType
+import jdk.incubator.vector.FloatVector
+import jdk.incubator.vector.VectorOperators
+import jdk.incubator.vector.VectorSpecies
+import java.nio.FloatBuffer
+import java.util.*
 
-import java.nio.FloatBuffer;
-import java.util.Arrays;
+class ArrayFloatTensor : FloatTensor {
+  val size: Long
+  val values: FloatArray
 
-import static java.util.Objects.requireNonNull;
+  internal constructor(values: FloatArray) {
+    this.size = values.size.toLong()
+    this.values = values
+  }
 
-public final class ArrayFloatTensor extends FloatTensor {
+  internal constructor(buf: FloatBuffer) {
+    this.values = FloatArray(buf.remaining())
+    this.size = values.size.toLong()
+    buf.get(this.values)
+    buf.rewind()
+  }
 
-    final long size;
-    final float[] values;
+  override fun size(): Long {
+    return size
+  }
 
-    ArrayFloatTensor(float[] values) {
-        this.size = values.length;
-        this.values = values;
+  override fun getFloat(index: Long): Float {
+    return values[Math.toIntExact(index)]
+  }
+
+  override fun setFloat(index: Int, value: Float) {
+    values[index] = value
+  }
+
+  public override fun type(): GGMLType {
+    return GGMLType.F32
+  }
+
+  override fun fillInPlace(thisOffset: Int, size: Int, value: Float): FloatTensor {
+    Arrays.fill(values, thisOffset, thisOffset + size, value)
+    return this
+  }
+
+  public override fun getFloatVector(species: VectorSpecies<Float>, index: Int): FloatVector {
+    if (!FloatTensor.Companion.USE_VECTOR_API) {
+      throw UnsupportedOperationException()
+    }
+    return FloatVector.fromArray(species, values, index)
+  }
+
+  override fun dot(thisOffset: Int, that: FloatTensor, thatOffset: Int, size: Int): Float {
+    if (that is ArrayFloatTensor) {
+      if (FloatTensor.Companion.USE_VECTOR_API) {
+        return vectorDot(this, thisOffset, that, thatOffset, size)
+      }
+      return FloatTensor.Companion.scalarDot(this, thisOffset, that, thatOffset, size)
+    }
+    return that.dot(thatOffset, this, thisOffset, size)
+  }
+
+  companion object {
+    fun allocate(vararg dims: Int): FloatTensor {
+      val numberOfElements: Int = FloatTensor.Companion.numberOfElements(*dims)
+      return ArrayFloatTensor(FloatArray(numberOfElements))
     }
 
-    ArrayFloatTensor(FloatBuffer buf) {
-        this.values = new float[buf.remaining()];
-        this.size = values.length;
-        buf.get(this.values);
-        buf.rewind();
-    }
-
-    public static FloatTensor allocate(int... dims) {
-        int numberOfElements = FloatTensor.numberOfElements(dims);
-        return new ArrayFloatTensor(new float[numberOfElements]);
-    }
-
-    @Override
-    public long size() {
-        return size;
-    }
-
-    @Override
-    public float getFloat(long index) {
-        return values[Math.toIntExact(index)];
-    }
-
-    @Override
-    public void setFloat(int index, float value) {
-        values[index] = value;
-    }
-
-    @Override
-    public GGMLType type() {
-        return GGMLType.F32;
-    }
-
-    @Override
-    public FloatTensor fillInPlace(int thisOffset, int size, float value) {
-        Arrays.fill(values, thisOffset, thisOffset + size, value);
-        return this;
-    }
-
-    @Override
-    public FloatVector getFloatVector(VectorSpecies<Float> species, int index) {
-        if (!USE_VECTOR_API) {
-            throw new UnsupportedOperationException();
+    private fun vectorDot(
+      thiz: ArrayFloatTensor,
+      thisOffset: Int,
+      that: ArrayFloatTensor,
+      thatOffset: Int,
+      size: Int
+    ): Float {
+      var `val` = FloatVector.zero(Objects.requireNonNull<VectorSpecies<Float>?>(FloatTensor.Companion.F_SPECIES))
+      val upperBound: Int = FloatTensor.Companion.F_SPECIES.loopBound(size)
+      run {
+        var i = 0
+        while (i < upperBound) {
+          val a = FloatVector.fromArray(FloatTensor.Companion.F_SPECIES, thiz.values, thisOffset + i)
+          val b = FloatVector.fromArray(FloatTensor.Companion.F_SPECIES, that.values, thatOffset + i)
+          `val` = a.fma(b, `val`)
+          i += FloatTensor.Companion.F_SPECIES.length()
         }
-        return FloatVector.fromArray(species, values, index);
+      }
+      var result = `val`.reduceLanes(VectorOperators.ADD)
+      for (i in upperBound..<size) {
+        result += thiz.values[thisOffset + i] * that.values[thatOffset + i]
+      }
+      return result
     }
-
-    @Override
-    public float dot(int thisOffset, FloatTensor that, int thatOffset, int size) {
-        if (that instanceof ArrayFloatTensor aft) {
-            if (USE_VECTOR_API) {
-                return vectorDot(this, thisOffset, aft, thatOffset, size);
-            }
-            return FloatTensor.scalarDot(this, thisOffset, aft, thatOffset, size);
-        }
-        return that.dot(thatOffset, this, thisOffset, size);
-    }
-
-    private static float vectorDot(ArrayFloatTensor thiz, int thisOffset, ArrayFloatTensor that, int thatOffset, int size) {
-        FloatVector val = FloatVector.zero(requireNonNull(F_SPECIES));
-        int upperBound = F_SPECIES.loopBound(size);
-        for (int i = 0; i < upperBound; i += F_SPECIES.length()) {
-            var a = FloatVector.fromArray(F_SPECIES, thiz.values, thisOffset + i);
-            var b = FloatVector.fromArray(F_SPECIES, that.values, thatOffset + i);
-            val = a.fma(b, val);
-        }
-        float result = val.reduceLanes(VectorOperators.ADD);
-        for (int i = upperBound; i < size; i++) {
-            result += thiz.values[thisOffset + i] * that.values[thatOffset + i];
-        }
-        return result;
-    }
+  }
 }

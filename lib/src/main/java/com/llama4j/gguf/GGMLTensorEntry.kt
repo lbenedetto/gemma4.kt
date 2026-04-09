@@ -1,12 +1,12 @@
-package com.llama4j.gguf;
+package com.llama4j.gguf
 
-import java.lang.foreign.MemorySegment;
+import java.lang.foreign.MemorySegment
 
-public record GGMLTensorEntry(
-    MemorySegment mappedFile,
-    String name,
-    GGMLType ggmlType,
-    int[] shape,
-    MemorySegment memorySegment
-) {
-}
+@JvmRecord
+data class GGMLTensorEntry(
+  val mappedFile: MemorySegment,
+  val name: String,
+  val ggmlType: GGMLType,
+  val shape: IntArray,
+  val memorySegment: MemorySegment
+)

@@ -1,6 +1,5 @@
-package com.llama4j.floattensor;
+package com.llama4j.floattensor
 
-@FunctionalInterface
-public interface MapFunction {
-  float apply(float value);
+fun interface MapFunction {
+  fun apply(value: Float): Float
 }

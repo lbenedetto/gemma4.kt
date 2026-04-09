@@ -1,25 +1,24 @@
-package com.llama4j.floattensor;
+package com.llama4j.floattensor
 
-import jdk.incubator.vector.VectorShape;
-import jdk.incubator.vector.VectorSpecies;
-import org.jspecify.annotations.Nullable;
+import jdk.incubator.vector.VectorShape
+import jdk.incubator.vector.VectorSpecies
 
-class VectorSpeciesConfig {
-    static final int VECTOR_BIT_SIZE = Integer.getInteger("llama.VectorBitSize", VectorShape.preferredShape().vectorBitSize());
-    static final boolean USE_VECTOR_API = VECTOR_BIT_SIZE != 0;
+internal class VectorSpeciesConfig private constructor() {
+  val FLOAT: VectorSpecies<Float> =
+    VectorShape.forBitSize(VECTOR_BIT_SIZE).withLanes<Float>(Float::class.javaPrimitiveType)
+  val INT: VectorSpecies<Int> = FLOAT.withLanes<Int>(Int::class.javaPrimitiveType)
+  val SHORT_HALF: VectorSpecies<Short> =
+    VectorShape.forBitSize(FLOAT.vectorBitSize() / 2).withLanes<Short>(Short::class.javaPrimitiveType)
 
-    public final VectorSpecies<Float> FLOAT = VectorShape.forBitSize(VECTOR_BIT_SIZE).withLanes(float.class);
-    public final VectorSpecies<Integer> INT = FLOAT.withLanes(int.class);
-    public final VectorSpecies<Short> SHORT_HALF = VectorShape.forBitSize(FLOAT.vectorBitSize() / 2).withLanes(short.class);
+  companion object {
+    val VECTOR_BIT_SIZE: Int = Integer.getInteger("llama.VectorBitSize", VectorShape.preferredShape().vectorBitSize())
+    val USE_VECTOR_API: Boolean = VECTOR_BIT_SIZE != 0
 
-    private VectorSpeciesConfig() {
+    fun create(): VectorSpeciesConfig? {
+      if (!USE_VECTOR_API) return null
+      val config = VectorSpeciesConfig()
+      assert(config.FLOAT.length() == config.SHORT_HALF.length())
+      return config
     }
-
-    public static @Nullable VectorSpeciesConfig create() {
-        if (!USE_VECTOR_API) return null;
-        var config = new VectorSpeciesConfig();
-        assert config.FLOAT.length() == config.SHORT_HALF.length();
-        return config;
-    }
-
+  }
 }

@@ -1,10 +1,11 @@
-package com.llama4j.sampler;
+package com.llama4j.sampler
 
-import com.llama4j.floattensor.FloatTensor;
+import com.llama4j.floattensor.FloatTensor
 
-@FunctionalInterface
-public interface Sampler {
-    int sampleToken(FloatTensor logits);
+fun interface Sampler {
+  fun sampleToken(logits: FloatTensor): Int
 
-    Sampler ARGMAX = FloatTensor::argmax;
+  companion object {
+    val ARGMAX: Sampler = Sampler { obj: FloatTensor -> obj.argmax() }
+  }
 }

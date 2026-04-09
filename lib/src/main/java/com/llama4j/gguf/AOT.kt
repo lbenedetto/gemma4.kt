@@ -1,84 +1,79 @@
-package com.llama4j.gguf;
+package com.llama4j.gguf
 
-import com.llama4j.Options;
-import com.llama4j.model.Llama;
-import com.llama4j.model.LlamaConfiguration;
-import com.llama4j.model.LlamaWeights;
-import com.llama4j.model.RoPE;
-import com.llama4j.util.Timer;
-import kotlin.Pair;
-import org.jetbrains.annotations.Contract;
-import org.jspecify.annotations.Nullable;
+import com.llama4j.Options
+import com.llama4j.model.Llama
+import com.llama4j.model.RoPE
+import org.jetbrains.annotations.Contract
+import java.io.IOException
+import java.nio.channels.FileChannel
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.StandardOpenOption
+import java.util.*
 
-import java.io.IOException;
-import java.nio.FloatBuffer;
-import java.nio.channels.FileChannel;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
-import java.util.Map;
-import java.util.Objects;
+object AOT {
+  private val PRELOADED_GGUF = preLoadGGUF(System.getProperty("gemma4.PreloadGGUF"))
 
-import static java.util.Objects.requireNonNull;
-
-public final class AOT {
-
-    private static final @Nullable PartialModel PRELOADED_GGUF = preLoadGGUF(System.getProperty("gemma4.PreloadGGUF"));
-
-    @Nullable
-    @Contract("null -> null")
-    private static PartialModel preLoadGGUF(@Nullable String modelPath) {
-        if (modelPath == null || modelPath.isEmpty()) {
-            return null;
-        }
-        try {
-            Path path = Path.of(modelPath);
-            if (!Files.exists(path) || !Files.isRegularFile(path)) {
-                throw new IllegalArgumentException("Cannot pre-load model: " + path);
-            }
-            try (FileChannel fileChannel = FileChannel.open(path, StandardOpenOption.READ)) {
-                GGUF gguf = GGUF.loadModel(fileChannel, path.toString());
-                Llama base = ModelLoader.loadModel(null, gguf, Options.DEFAULT_MAX_TOKENS, false);
-                // Precompute RoPE frequencies at build time (pure Java arrays, survives native-image)
-                LlamaConfiguration config = base.configuration();
-                Pair<float[], float[]> ropeFreqsSWA = RoPE.precomputeFreqsCis(
-                        config.contextLength, config.headSizeSWA, config.ropeThetaSWA);
-                // Read rope_freqs from model file
-                Pair<float[], float[]> ropeFreqsFull;
-                Map<String, GGMLTensorEntry> tmpEntries = GGUF.loadTensors(fileChannel, gguf.getTensorDataOffset(), gguf.getTensorInfos());
-                FloatBuffer ropeFreqsBuf = ModelLoader.toFloatBuffer(requireNonNull(tmpEntries.get("rope_freqs.weight")));
-                float[] modelRopeFreqs = new float[ropeFreqsBuf.remaining()];
-                ropeFreqsBuf.get(modelRopeFreqs);
-                ropeFreqsFull = RoPE.precomputeFreqsCisFromFreqs(
-                        config.contextLength, config.headSizeFull, config.ropeTheta, modelRopeFreqs);
-                return new PartialModel(
-                        path.getFileName().toString(), base,
-                        gguf.getTensorDataOffset(), gguf.getTensorInfos(),
-                        ropeFreqsSWA, ropeFreqsFull);
-            }
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
+  @Contract("null -> null")
+  private fun preLoadGGUF(modelPath: String?): PartialModel? {
+    if (modelPath == null || modelPath.isEmpty()) {
+      return null
     }
-
-    @Nullable
-    public static Llama tryUsePreLoaded(Path modelPath, int contextLength) throws IOException {
-        PartialModel preLoaded = AOT.PRELOADED_GGUF;
-        if (preLoaded == null) {
-            return null;
-        }
-        String optionsModel = modelPath.getFileName().toString();
-        String preLoadedModel = preLoaded.modelFileName();
-        if (!Objects.equals(optionsModel, preLoadedModel)) {
-            return null;
-        }
-        Llama baseModel = preLoaded.model();
-        try (var timer = Timer.log("Load tensors from pre-loaded model");
-             var fileChannel = FileChannel.open(modelPath, StandardOpenOption.READ)) {
-            Map<String, GGMLTensorEntry> tensorEntries = GGUF.loadTensors(fileChannel, preLoaded.tensorDataOffset(), preLoaded.tensorInfos());
-            LlamaWeights weights = ModelLoader.loadWeightsWithRoPE(tensorEntries, baseModel.configuration(),
-                    preLoaded.ropeFreqsSWA(), preLoaded.ropeFreqsFull());
-            return new Llama(baseModel.configuration().withContextLength(contextLength), baseModel.tokenizer(), weights);
-        }
+    try {
+      val path = Path.of(modelPath)
+      require(!(!Files.exists(path) || !Files.isRegularFile(path))) { "Cannot pre-load model: " + path }
+      FileChannel.open(path, StandardOpenOption.READ).use { fileChannel ->
+        val gguf: GGUF = GGUF.Companion.loadModel(fileChannel, path.toString())
+        val base = ModelLoader.loadModel(null, gguf, Options.Companion.DEFAULT_MAX_TOKENS, false)
+        // Precompute RoPE frequencies at build time (pure Java arrays, survives native-image)
+        val config = base.configuration
+        val ropeFreqsSWA = RoPE.precomputeFreqsCis(
+          config.contextLength, config.headSizeSWA, config.ropeThetaSWA.toDouble()
+        )
+        // Read rope_freqs from model file
+        val ropeFreqsFull: Pair<FloatArray, FloatArray>?
+        val tmpEntries: MutableMap<String, GGMLTensorEntry> =
+          GGUF.Companion.loadTensors(fileChannel, gguf.getTensorDataOffset(), gguf.getTensorInfos())
+        val ropeFreqsBuf =
+          ModelLoader.toFloatBuffer(Objects.requireNonNull<GGMLTensorEntry>(tmpEntries.get("rope_freqs.weight")))
+        val modelRopeFreqs = FloatArray(ropeFreqsBuf.remaining())
+        ropeFreqsBuf.get(modelRopeFreqs)
+        ropeFreqsFull = RoPE.precomputeFreqsCisFromFreqs(
+          config.contextLength, config.headSizeFull, config.ropeTheta.toDouble(), modelRopeFreqs
+        )
+        return PartialModel(
+          path.getFileName().toString(), base,
+          gguf.getTensorDataOffset(), gguf.getTensorInfos(),
+          ropeFreqsSWA, ropeFreqsFull
+        )
+      }
+    } catch (e: IOException) {
+      throw RuntimeException(e)
     }
+  }
+
+  @Throws(IOException::class)
+  fun tryUsePreLoaded(modelPath: Path, contextLength: Int): Llama? {
+    val preLoaded = PRELOADED_GGUF
+    if (preLoaded == null) {
+      return null
+    }
+    val optionsModel = modelPath.getFileName().toString()
+    val preLoadedModel = preLoaded.modelFileName
+    if (optionsModel != preLoadedModel) {
+      return null
+    }
+    val baseModel = preLoaded.model
+    log("Load tensors from pre-loaded model").use { timer ->
+      FileChannel.open(modelPath, StandardOpenOption.READ).use { fileChannel ->
+        val tensorEntries: MutableMap<String, GGMLTensorEntry> =
+          GGUF.Companion.loadTensors(fileChannel, preLoaded.tensorDataOffset, preLoaded.tensorInfos)
+        val weights = ModelLoader.loadWeightsWithRoPE(
+          tensorEntries, baseModel.configuration,
+          preLoaded.ropeFreqsSWA, preLoaded.ropeFreqsFull
+        )
+        return Llama(baseModel.configuration.withContextLength(contextLength), baseModel.tokenizer, weights)
+      }
+    }
+  }
 }

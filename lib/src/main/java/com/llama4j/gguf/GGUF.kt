@@ -1,261 +1,288 @@
-package com.llama4j.gguf;
+package com.llama4j.gguf
 
-import com.llama4j.floattensor.FloatTensor;
-import com.llama4j.util.Timer;
-import kotlin.Pair;
-import org.jspecify.annotations.Nullable;
+import com.llama4j.floattensor.FloatTensor
+import java.io.IOException
+import java.lang.foreign.Arena
+import java.nio.channels.FileChannel
+import java.nio.charset.StandardCharsets
+import java.nio.file.Path
+import java.util.*
+import java.util.function.IntPredicate
 
-import java.io.IOException;
-import java.lang.foreign.Arena;
-import java.lang.foreign.MemorySegment;
-import java.nio.channels.FileChannel;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Path;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
-import static java.util.Objects.requireNonNull;
-
-public final class GGUF {
-    private static final int GGUF_MAGIC = 0x46554747;
-    private static final int DEFAULT_ALIGNMENT = 32; // must be a power of 2
-    private static final int PARSE_BUFFER_SIZE = 1 << 20;
-    private static final List<Integer> SUPPORTED_GGUF_VERSIONS = List.of(2, 3);
-    private int tensorCount; // uint64_t
-    private int alignment;
-    private @Nullable Map<String, Object> metadata; // lateinit
-    private @Nullable Map<String, GGUFTensorInfo> tensorInfos; // lateinit
-    private long tensorDataOffset;
-
-    public Map<String, Object> getMetadata() {
-        return requireNonNull(metadata);
+class GGUF {
+  private var tensorCount = 0 // uint64_t
+  var alignment: Int = 0
+    get() {
+      if (field != 0) {
+        return field
+      }
+      field = Objects.requireNonNull<MutableMap<String, Any>?>(metadata)
+        .getOrDefault("general.alignment", DEFAULT_ALIGNMENT) as Int
+      assert(Integer.bitCount(field) == 1) { "alignment must be a power of two" }
+      return field
     }
+    private set
+  private var metadata: MutableMap<String, Any>? = null // lateinit
+  private var tensorInfos: MutableMap<String, GGUFTensorInfo>? = null // lateinit
+  var tensorDataOffset: Long = 0
+    private set
 
-    public long getTensorDataOffset() {
-        return tensorDataOffset;
+  fun getMetadata(): MutableMap<String, Any> {
+    return Objects.requireNonNull<MutableMap<String, Any>?>(metadata)
+  }
+
+  fun getTensorInfos(): MutableMap<String, GGUFTensorInfo> {
+    return Objects.requireNonNull<MutableMap<String, GGUFTensorInfo>?>(tensorInfos)
+  }
+
+  @Throws(IOException::class)
+  private fun loadModelImpl(reader: ChannelReader) {
+    readHeader(reader)
+    this.tensorInfos = HashMap.newHashMap<String, GGUFTensorInfo>(tensorCount)
+    for (i in 0..<tensorCount) {
+      val ti = readTensorInfo(reader)
+      assert(!tensorInfos!!.containsKey(ti.name))
+      tensorInfos!!.put(ti.name, ti)
     }
+    val position = reader.position()
+    val padding = ((this.alignment - (position % this.alignment)) % this.alignment).toInt()
+    skipBytes(reader, padding)
+    this.tensorDataOffset = reader.position()
+  }
 
-    public Map<String, GGUFTensorInfo> getTensorInfos() {
-        return requireNonNull(tensorInfos);
+  @Throws(IOException::class)
+  private fun readGGMLType(reader: ChannelReader): GGMLType {
+    val ggmlTypeId = readInt(reader)
+    return GGMLType.Companion.fromId(ggmlTypeId)
+  }
+
+  @Throws(IOException::class)
+  private fun readTensorInfo(reader: ChannelReader): GGUFTensorInfo {
+    val name = readString(reader)
+    assert(name.length <= 64)
+    val n_dimensions = readInt(reader)
+    assert(n_dimensions <= 4)
+    val dimensions = IntArray(n_dimensions)
+    for (i in 0..<n_dimensions) {
+      dimensions[i] = Math.toIntExact(readLong(reader))
     }
+    val ggmlType = readGGMLType(reader)
+    val offset = readLong(reader)
+    assert(offset % this.alignment == 0L)
+    return GGUFTensorInfo(name, dimensions, ggmlType, offset)
+  }
 
-    public static Map<String, GGMLTensorEntry> loadTensors(FileChannel fileChannel, long tensorDataOffset, Map<String, GGUFTensorInfo> tensorInfos) throws IOException {
-        Arena arena = Arena.global();
-        MemorySegment tensorData = fileChannel.map(FileChannel.MapMode.READ_ONLY, tensorDataOffset, fileChannel.size() - tensorDataOffset, arena);
-        Map<String, GGMLTensorEntry> tensorEntries = HashMap.newHashMap(tensorInfos.size());
-        for (Map.Entry<String, GGUFTensorInfo> entry : tensorInfos.entrySet()) {
-            GGUFTensorInfo ti = entry.getValue();
-            long numberOfElements = FloatTensor.numberOfElementsLong(ti.dimensions());
-            long sizeInBytes = ti.ggmlType().byteSizeFor(numberOfElements);
-            MemorySegment memorySegment = tensorData.asSlice(ti.offset(), sizeInBytes);
-            tensorEntries.put(ti.name(), new GGMLTensorEntry(tensorData, ti.name(), ti.ggmlType(), ti.dimensions(), memorySegment));
+  @Throws(IOException::class)
+  private fun readString(reader: ChannelReader): String {
+    val len = Math.toIntExact(readLong(reader))
+    return String(readBytes(reader, len), StandardCharsets.UTF_8)
+  }
+
+  @Throws(IOException::class)
+  private fun readKeyValuePair(reader: ChannelReader): Pair<String, Any> {
+    val key = readString(reader)
+    assert(key.length < (1 shl 16))
+    assert(
+      key.codePoints()
+        .allMatch(IntPredicate { cp: Int -> ('a'.code <= cp && cp <= 'z'.code) || ('0'.code <= cp && cp <= '9'.code) || cp == '_'.code || cp == '.'.code })
+    )
+    val value = readMetadataValue(reader)
+    return Pair<String, Any>(key, value)
+  }
+
+  @Throws(IOException::class)
+  private fun readMetadataValue(reader: ChannelReader): Any {
+    val valueType = readMetadataValueType(reader)
+    return readMetadataValueOfType(valueType, reader)
+  }
+
+  @Throws(IOException::class)
+  fun readHeader(reader: ChannelReader) {
+    val magic = readInt(reader)
+    require(magic == GGUF_MAGIC) { "unsupported header.magic " + magic }
+    val version = readInt(reader)
+    require(SUPPORTED_GGUF_VERSIONS.contains(version)) { "unsupported header.version " + version }
+    this.tensorCount = Math.toIntExact(readLong(reader))
+    // uint64_t
+    val metadata_kv_count = Math.toIntExact(readLong(reader))
+    this.metadata = HashMap.newHashMap<String, Any>(metadata_kv_count)
+    for (i in 0..<metadata_kv_count) {
+      val keyValue = readKeyValuePair(reader)
+      assert(!metadata!!.containsKey(keyValue.first))
+      metadata!!.put(keyValue.first, keyValue.second)
+    }
+  }
+
+  @Throws(IOException::class)
+  private fun readArray(reader: ChannelReader): Any {
+    val valueType = readMetadataValueType(reader)
+    val len = Math.toIntExact(readLong(reader))
+    when (valueType) {
+      MetadataValueType.UINT8, MetadataValueType.INT8 -> {
+        return readBytes(reader, len)
+      }
+
+      MetadataValueType.UINT16, MetadataValueType.INT16 -> {
+        val shorts = ShortArray(len)
+        for (i in 0..<len) {
+          shorts[i] = readShort(reader)
         }
-        return tensorEntries;
-    }
+        return shorts
+      }
 
-    public static GGUF loadModel(Path modelPath) throws IOException {
-        try (FileChannel fileChannel = FileChannel.open(modelPath)) {
-            return loadModel(fileChannel, modelPath.toString());
+      MetadataValueType.UINT32, MetadataValueType.INT32 -> {
+        val ints = IntArray(len)
+        for (i in 0..<len) {
+          ints[i] = readInt(reader)
         }
-    }
+        return ints
+      }
 
-    public static GGUF loadModel(FileChannel fileChannel, String modelLabel) throws IOException {
-        try (var ignored = Timer.log("Parse " + modelLabel)) {
-            fileChannel.position(0L);
-            GGUF gguf = new GGUF();
-            ChannelReader reader = new ChannelReader(fileChannel, PARSE_BUFFER_SIZE);
-            gguf.loadModelImpl(reader);
-            return gguf;
+      MetadataValueType.FLOAT32 -> {
+        val floats = FloatArray(len)
+        for (i in 0..<len) {
+          floats[i] = readFloat(reader)
         }
-    }
+        return floats
+      }
 
-    private void loadModelImpl(ChannelReader reader) throws IOException {
-        readHeader(reader);
-        this.tensorInfos = HashMap.newHashMap(tensorCount);
-        for (int i = 0; i < tensorCount; ++i) {
-            GGUFTensorInfo ti = readTensorInfo(reader);
-            assert !tensorInfos.containsKey(ti.name());
-            tensorInfos.put(ti.name(), ti);
+      MetadataValueType.BOOL -> {
+        val booleans = BooleanArray(len)
+        for (i in 0..<len) {
+          booleans[i] = readBoolean(reader)
         }
-        long position = reader.position();
-        int padding = (int) ((getAlignment() - (position % getAlignment())) % getAlignment());
-        skipBytes(reader, padding);
-        this.tensorDataOffset = reader.position();
-    }
+        return booleans
+      }
 
-    private GGMLType readGGMLType(ChannelReader reader) throws IOException {
-        int ggmlTypeId = readInt(reader);
-        return GGMLType.fromId(ggmlTypeId);
-    }
-
-    private GGUFTensorInfo readTensorInfo(ChannelReader reader) throws IOException {
-        String name = readString(reader);
-        assert name.length() <= 64;
-        int n_dimensions = readInt(reader);
-        assert n_dimensions <= 4;
-        int[] dimensions = new int[n_dimensions];
-        for (int i = 0; i < n_dimensions; ++i) {
-            dimensions[i] = Math.toIntExact(readLong(reader));
+      MetadataValueType.STRING -> {
+        val strings: Array<String> = arrayOfNulls<String>(len)
+        for (i in 0..<len) {
+          strings[i] = readString(reader)
         }
-        GGMLType ggmlType = readGGMLType(reader);
-        long offset = readLong(reader);
-        assert offset % getAlignment() == 0;
-        return new GGUFTensorInfo(name, dimensions, ggmlType, offset);
-    }
+        return strings
+      }
 
-    private String readString(ChannelReader reader) throws IOException {
-        int len = Math.toIntExact(readLong(reader));
-        return new String(readBytes(reader, len), StandardCharsets.UTF_8);
-    }
-
-    private Pair<String, Object> readKeyValuePair(ChannelReader reader) throws IOException {
-        String key = readString(reader);
-        assert key.length() < (1 << 16);
-        assert key.codePoints().allMatch(cp -> ('a' <= cp && cp <= 'z') || ('0' <= cp && cp <= '9') || cp == '_' || cp == '.');
-        Object value = readMetadataValue(reader);
-        return new Pair<>(key, value);
-    }
-
-    private Object readMetadataValue(ChannelReader reader) throws IOException {
-        MetadataValueType valueType = readMetadataValueType(reader);
-        return readMetadataValueOfType(valueType, reader);
-    }
-
-    void readHeader(ChannelReader reader) throws IOException {
-        int magic = readInt(reader);
-        if (magic != GGUF_MAGIC) {
-            throw new IllegalArgumentException("unsupported header.magic " + magic);
+      MetadataValueType.ARRAY -> {
+        val arrays: Array<Any> = arrayOfNulls<Any>(len)
+        for (i in 0..<len) {
+          arrays[i] = readArray(reader)
         }
-        int version = readInt(reader);
-        if (!SUPPORTED_GGUF_VERSIONS.contains(version)) {
-            throw new IllegalArgumentException("unsupported header.version " + version);
-        }
-        this.tensorCount = Math.toIntExact(readLong(reader));
-        // uint64_t
-        int metadata_kv_count = Math.toIntExact(readLong(reader));
-        this.metadata = HashMap.newHashMap(metadata_kv_count);
-        for (int i = 0; i < metadata_kv_count; ++i) {
-            Pair<String, Object> keyValue = readKeyValuePair(reader);
-            assert !metadata.containsKey(keyValue.getFirst());
-            metadata.put(keyValue.getFirst(), keyValue.getSecond());
-        }
+        return arrays
+      }
+
+      else -> throw UnsupportedOperationException("read array of " + valueType)
+    }
+  }
+
+  @Throws(IOException::class)
+  private fun readMetadataValueOfType(valueType: MetadataValueType, reader: ChannelReader): Any {
+    return when (valueType) {
+      MetadataValueType.UINT8, MetadataValueType.INT8 -> readByte(reader)
+      MetadataValueType.UINT16, MetadataValueType.INT16 -> readShort(reader)
+      MetadataValueType.UINT32, MetadataValueType.INT32 -> readInt(reader)
+      MetadataValueType.FLOAT32 -> readFloat(reader)
+      MetadataValueType.UINT64, MetadataValueType.INT64 -> readLong(reader)
+      MetadataValueType.FLOAT64 -> readDouble(reader)
+      MetadataValueType.BOOL -> readBoolean(reader)
+      MetadataValueType.STRING -> readString(reader)
+      MetadataValueType.ARRAY -> readArray(reader)
+    }
+  }
+
+  @Throws(IOException::class)
+  private fun readMetadataValueType(reader: ChannelReader): MetadataValueType {
+    val index = readInt(reader)
+    return MetadataValueType.Companion.fromIndex(index)
+  }
+
+  @Throws(IOException::class)
+  private fun readBytes(reader: ChannelReader, length: Int): ByteArray {
+    return reader.readBytes(length)
+  }
+
+  @Throws(IOException::class)
+  private fun skipBytes(reader: ChannelReader, length: Int) {
+    reader.skipBytes(length)
+  }
+
+  @Throws(IOException::class)
+  private fun readByte(reader: ChannelReader): Byte {
+    return reader.readByte()
+  }
+
+  @Throws(IOException::class)
+  private fun readBoolean(reader: ChannelReader): Boolean {
+    return readByte(reader).toInt() != 0
+  }
+
+  @Throws(IOException::class)
+  private fun readShort(reader: ChannelReader): Short {
+    return reader.readShort()
+  }
+
+  @Throws(IOException::class)
+  private fun readInt(reader: ChannelReader): Int {
+    return reader.readInt()
+  }
+
+  @Throws(IOException::class)
+  private fun readLong(reader: ChannelReader): Long {
+    return reader.readLong()
+  }
+
+  @Throws(IOException::class)
+  private fun readFloat(reader: ChannelReader): Float {
+    return reader.readFloat()
+  }
+
+  @Throws(IOException::class)
+  private fun readDouble(reader: ChannelReader): Double {
+    return reader.readDouble()
+  }
+
+  companion object {
+    private const val GGUF_MAGIC = 0x46554747
+    private const val DEFAULT_ALIGNMENT = 32 // must be a power of 2
+    private val PARSE_BUFFER_SIZE = 1 shl 20
+    private val SUPPORTED_GGUF_VERSIONS = mutableListOf<Int>(2, 3)
+
+    @Throws(IOException::class)
+    fun loadTensors(
+      fileChannel: FileChannel,
+      tensorDataOffset: Long,
+      tensorInfos: MutableMap<String, GGUFTensorInfo>
+    ): MutableMap<String, GGMLTensorEntry> {
+      val arena = Arena.global()
+      val tensorData =
+        fileChannel.map(FileChannel.MapMode.READ_ONLY, tensorDataOffset, fileChannel.size() - tensorDataOffset, arena)
+      val tensorEntries: MutableMap<String, GGMLTensorEntry> =
+        HashMap.newHashMap<String, GGMLTensorEntry>(tensorInfos.size)
+      for (entry in tensorInfos.entries) {
+        val ti = entry.value
+        val numberOfElements: Long = FloatTensor.Companion.numberOfElementsLong(*ti.dimensions)
+        val sizeInBytes = ti.ggmlType.byteSizeFor(numberOfElements)
+        val memorySegment = tensorData.asSlice(ti.offset, sizeInBytes)
+        tensorEntries.put(ti.name, GGMLTensorEntry(tensorData, ti.name, ti.ggmlType, ti.dimensions, memorySegment))
+      }
+      return tensorEntries
     }
 
-    private Object readArray(ChannelReader reader) throws IOException {
-        MetadataValueType valueType = readMetadataValueType(reader);
-        int len = Math.toIntExact(readLong(reader));
-        switch (valueType) {
-            case UINT8, INT8 -> {
-                return readBytes(reader, len);
-            }
-            case UINT16, INT16 -> {
-                short[] shorts = new short[len];
-                for (int i = 0; i < len; ++i) {
-                    shorts[i] = readShort(reader);
-                }
-                return shorts;
-            }
-            case UINT32, INT32 -> {
-                int[] ints = new int[len];
-                for (int i = 0; i < len; ++i) {
-                    ints[i] = readInt(reader);
-                }
-                return ints;
-            }
-            case FLOAT32 -> {
-                float[] floats = new float[len];
-                for (int i = 0; i < len; ++i) {
-                    floats[i] = readFloat(reader);
-                }
-                return floats;
-            }
-            case BOOL -> {
-                boolean[] booleans = new boolean[len];
-                for (int i = 0; i < len; ++i) {
-                    booleans[i] = readBoolean(reader);
-                }
-                return booleans;
-            }
-            case STRING -> {
-                String[] strings = new String[len];
-                for (int i = 0; i < len; ++i) {
-                    strings[i] = readString(reader);
-                }
-                return strings;
-            }
-            case ARRAY -> {
-                Object[] arrays = new Object[len];
-                for (int i = 0; i < len; ++i) {
-                    arrays[i] = readArray(reader);
-                }
-                return arrays;
-            }
-            default -> throw new UnsupportedOperationException("read array of " + valueType);
-        }
+    @Throws(IOException::class)
+    fun loadModel(modelPath: Path): GGUF {
+      FileChannel.open(modelPath).use { fileChannel ->
+        return loadModel(fileChannel, modelPath.toString())
+      }
     }
 
-    private Object readMetadataValueOfType(MetadataValueType valueType, ChannelReader reader) throws IOException {
-        return switch (valueType) {
-            case UINT8, INT8 -> readByte(reader);
-            case UINT16, INT16 -> readShort(reader);
-            case UINT32, INT32 -> readInt(reader);
-            case FLOAT32 -> readFloat(reader);
-            case UINT64, INT64 -> readLong(reader);
-            case FLOAT64 -> readDouble(reader);
-            case BOOL -> readBoolean(reader);
-            case STRING -> readString(reader);
-            case ARRAY -> readArray(reader);
-        };
+    @Throws(IOException::class)
+    fun loadModel(fileChannel: FileChannel, modelLabel: String): GGUF {
+      log("Parse " + modelLabel).use { ignored ->
+        fileChannel.position(0L)
+        val gguf = GGUF()
+        val reader = ChannelReader(fileChannel, PARSE_BUFFER_SIZE)
+        gguf.loadModelImpl(reader)
+        return gguf
+      }
     }
-
-    private MetadataValueType readMetadataValueType(ChannelReader reader) throws IOException {
-        int index = readInt(reader);
-        return MetadataValueType.fromIndex(index);
-    }
-
-    private byte[] readBytes(ChannelReader reader, int length) throws IOException {
-        return reader.readBytes(length);
-    }
-
-    private void skipBytes(ChannelReader reader, int length) throws IOException {
-        reader.skipBytes(length);
-    }
-
-    private byte readByte(ChannelReader reader) throws IOException {
-        return reader.readByte();
-    }
-
-    private boolean readBoolean(ChannelReader reader) throws IOException {
-        return readByte(reader) != 0;
-    }
-
-    private short readShort(ChannelReader reader) throws IOException {
-        return reader.readShort();
-    }
-
-    private int readInt(ChannelReader reader) throws IOException {
-        return reader.readInt();
-    }
-
-    private long readLong(ChannelReader reader) throws IOException {
-        return reader.readLong();
-    }
-
-    private float readFloat(ChannelReader reader) throws IOException {
-        return reader.readFloat();
-    }
-
-    private double readDouble(ChannelReader reader) throws IOException {
-        return reader.readDouble();
-    }
-
-    public int getAlignment() {
-        if (alignment != 0) {
-            return alignment;
-        }
-        alignment = (int) requireNonNull(metadata).getOrDefault("general.alignment", DEFAULT_ALIGNMENT);
-        assert Integer.bitCount(alignment) == 1 : "alignment must be a power of two";
-        return alignment;
-    }
+  }
 }

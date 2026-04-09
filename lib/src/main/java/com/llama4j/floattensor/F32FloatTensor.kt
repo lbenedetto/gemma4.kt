@@ -1,68 +1,88 @@
-package com.llama4j.floattensor;
+package com.llama4j.floattensor
 
-import com.llama4j.gguf.GGMLType;
-import jdk.incubator.vector.FloatVector;
-import jdk.incubator.vector.VectorOperators;
-import jdk.incubator.vector.VectorSpecies;
+import com.llama4j.gguf.GGMLType
+import jdk.incubator.vector.FloatVector
+import jdk.incubator.vector.VectorOperators
+import jdk.incubator.vector.VectorSpecies
+import java.lang.Float
+import java.lang.foreign.MemorySegment
+import java.lang.foreign.ValueLayout
+import java.nio.ByteOrder
+import java.util.*
+import kotlin.Int
+import kotlin.Long
+import kotlin.UnsupportedOperationException
+import kotlin.run
 
-import java.lang.foreign.MemorySegment;
-import java.lang.foreign.ValueLayout;
-import java.nio.ByteOrder;
+internal class F32FloatTensor(numElements: Long, memorySegment: MemorySegment) : FloatTensor() {
+  private val size: Long
+  private val memorySegment: MemorySegment
 
-import static java.util.Objects.requireNonNull;
+  init {
+    this.size = numElements
+    this.memorySegment = memorySegment
+  }
 
-final class F32FloatTensor extends FloatTensor {
+  override fun size(): Long {
+    return size
+  }
 
-    private final long size;
-    private final MemorySegment memorySegment;
+  override fun getFloat(index: Long): Float {
+    return memorySegment.get(ValueLayout.JAVA_FLOAT_UNALIGNED, index * Float.BYTES)
+  }
 
-    F32FloatTensor(long numElements, MemorySegment memorySegment) {
-        this.size = numElements;
-        this.memorySegment = memorySegment;
+  override fun setFloat(index: Int, value: kotlin.Float) {
+    throw UnsupportedOperationException("read-only")
+  }
+
+  public override fun type(): GGMLType {
+    return GGMLType.F32
+  }
+
+  public override fun getFloatVector(species: VectorSpecies<kotlin.Float>, index: Int): FloatVector {
+    if (!FloatTensor.Companion.USE_VECTOR_API) {
+      throw UnsupportedOperationException()
     }
+    return FloatVector.fromMemorySegment(species, memorySegment, index.toLong() * Float.BYTES, ByteOrder.LITTLE_ENDIAN)
+  }
 
-    @Override public long size() { return size; }
-
-    @Override
-    public float getFloat(long index) {
-        return memorySegment.get(ValueLayout.JAVA_FLOAT_UNALIGNED, (long) index * Float.BYTES);
+  override fun dot(thisOffset: Int, that: FloatTensor, thatOffset: Int, size: Int): kotlin.Float {
+    if (that is ArrayFloatTensor && FloatTensor.Companion.USE_VECTOR_API) {
+      return vectorDot(this, thisOffset, that, thatOffset, size)
     }
+    return FloatTensor.Companion.scalarDot(this, thisOffset, that, thatOffset, size)
+  }
 
-    @Override
-    public void setFloat(int index, float value) {
-        throw new UnsupportedOperationException("read-only");
-    }
-
-    @Override public GGMLType type() { return GGMLType.F32; }
-
-    @Override
-    public FloatVector getFloatVector(VectorSpecies<Float> species, int index) {
-        if (!USE_VECTOR_API) {
-            throw new UnsupportedOperationException();
+  companion object {
+    private fun vectorDot(
+      thiz: F32FloatTensor,
+      thisOffset: Int,
+      that: ArrayFloatTensor,
+      thatOffset: Int,
+      size: Int
+    ): kotlin.Float {
+      var `val` =
+        FloatVector.zero(Objects.requireNonNull<VectorSpecies<kotlin.Float>?>(FloatTensor.Companion.F_SPECIES))
+      val upperBound: Int = FloatTensor.Companion.F_SPECIES.loopBound(size)
+      run {
+        var i = 0
+        while (i < upperBound) {
+          val a = FloatVector.fromMemorySegment(
+            FloatTensor.Companion.F_SPECIES,
+            thiz.memorySegment,
+            (thisOffset + i).toLong() * Float.BYTES,
+            ByteOrder.LITTLE_ENDIAN
+          )
+          val b = FloatVector.fromArray(FloatTensor.Companion.F_SPECIES, that.values, thatOffset + i)
+          `val` = a.fma(b, `val`)
+          i += FloatTensor.Companion.F_SPECIES.length()
         }
-        return FloatVector.fromMemorySegment(species, memorySegment, (long) index * Float.BYTES, ByteOrder.LITTLE_ENDIAN);
+      }
+      var result = `val`.reduceLanes(VectorOperators.ADD)
+      for (i in upperBound..<size) {
+        result += thiz.getFloat((thisOffset + i).toLong()) * that.values[thatOffset + i]
+      }
+      return result
     }
-
-    @Override
-    public float dot(int thisOffset, FloatTensor that, int thatOffset, int size) {
-        if (that instanceof ArrayFloatTensor aft && USE_VECTOR_API) {
-            return vectorDot(this, thisOffset, aft, thatOffset, size);
-        }
-        return FloatTensor.scalarDot(this, thisOffset, that, thatOffset, size);
-    }
-
-    private static float vectorDot(F32FloatTensor thiz, int thisOffset, ArrayFloatTensor that, int thatOffset, int size) {
-        FloatVector val = FloatVector.zero(requireNonNull(F_SPECIES));
-        int upperBound = F_SPECIES.loopBound(size);
-        for (int i = 0; i < upperBound; i += F_SPECIES.length()) {
-            var a = FloatVector.fromMemorySegment(F_SPECIES, thiz.memorySegment, (long) (thisOffset + i) * Float.BYTES, ByteOrder.LITTLE_ENDIAN);
-            var b = FloatVector.fromArray(F_SPECIES, that.values, thatOffset + i);
-            val = a.fma(b, val);
-        }
-        float result = val.reduceLanes(VectorOperators.ADD);
-        for (int i = upperBound; i < size; i++) {
-            result += thiz.getFloat(thisOffset + i) * that.values[thatOffset + i];
-        }
-        return result;
-    }
+  }
 }

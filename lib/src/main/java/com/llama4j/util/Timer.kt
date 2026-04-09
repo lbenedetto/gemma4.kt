@@ -1,27 +1,26 @@
-package com.llama4j.util;
+package com.llama4j.util
 
-import java.util.Locale;
-import java.util.concurrent.TimeUnit;
+import java.lang.AutoCloseable
+import java.util.concurrent.TimeUnit
 
-public interface Timer extends AutoCloseable {
-    @Override
-    void close(); // no Exception
+interface Timer : AutoCloseable {
+  override fun close() // no Exception
 
-    static Timer log(String label) {
-        return log(label, TimeUnit.MILLISECONDS);
+  companion object {
+    @JvmOverloads
+    fun log(label: String, timeUnit: TimeUnit = TimeUnit.MILLISECONDS): Timer {
+      return object : Timer {
+        val startNanos: Long = System.nanoTime()
+
+        override fun close() {
+          val elapsedNanos = System.nanoTime() - startNanos
+          System.err.println(
+            (label + ": "
+                + timeUnit.convert(elapsedNanos, TimeUnit.NANOSECONDS) + " "
+                + timeUnit.toChronoUnit().name.lowercase())
+          )
+        }
+      }
     }
-
-    static Timer log(String label, TimeUnit timeUnit) {
-        return new Timer() {
-            final long startNanos = System.nanoTime();
-
-            @Override
-            public void close() {
-                long elapsedNanos = System.nanoTime() - startNanos;
-                System.err.println(label + ": "
-                        + timeUnit.convert(elapsedNanos, TimeUnit.NANOSECONDS) + " "
-                        + timeUnit.toChronoUnit().name().toLowerCase(Locale.ROOT));
-            }
-        };
-    }
+  }
 }

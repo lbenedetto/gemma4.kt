@@ -1,65 +1,101 @@
-package com.llama4j.floattensor;
+package com.llama4j.floattensor
 
-import com.llama4j.gguf.GGMLType;
-import jdk.incubator.vector.FloatVector;
-import jdk.incubator.vector.ShortVector;
-import jdk.incubator.vector.VectorOperators;
-import jdk.incubator.vector.VectorSpecies;
+import com.llama4j.gguf.GGMLType
+import jdk.incubator.vector.FloatVector
+import jdk.incubator.vector.ShortVector
+import jdk.incubator.vector.VectorOperators
+import jdk.incubator.vector.VectorSpecies
+import java.lang.Float
+import java.lang.foreign.MemorySegment
+import java.nio.ByteOrder
+import java.util.*
+import kotlin.Int
+import kotlin.Long
+import kotlin.Short
+import kotlin.UnsupportedOperationException
+import kotlin.assert
 
-import java.lang.foreign.MemorySegment;
-import java.nio.ByteOrder;
+internal class BF16FloatTensor(size: Long, memorySegment: MemorySegment) : FloatTensor() {
+  val size: Long
+  val memorySegment: MemorySegment
 
-import static java.util.Objects.requireNonNull;
+  init {
+    this.size = size
+    this.memorySegment = memorySegment
+  }
 
-final class BF16FloatTensor extends FloatTensor {
+  override fun size(): Long {
+    return size
+  }
 
-    final long size;
-    final MemorySegment memorySegment;
+  override fun setFloat(index: Int, value: Float) {
+    throw UnsupportedOperationException("setFloat")
+  }
 
-    public BF16FloatTensor(long size, MemorySegment memorySegment) {
-        this.size = size;
-        this.memorySegment = memorySegment;
+  override fun getFloatVector(species: VectorSpecies<Float>, index: Int): FloatVector? {
+    throw UnsupportedOperationException("getFloatVector")
+  }
+
+  public override fun type(): GGMLType {
+    return GGMLType.BF16
+  }
+
+  override fun getFloat(index: Long): Float {
+    assert(0 <= index && index < size)
+    val bits: Short = FloatTensor.Companion.readShort(memorySegment, index * 2)
+    return Float.intBitsToFloat(bits.toInt() shl 16)
+  }
+
+  override fun dot(thisOffset: Int, that: FloatTensor, thatOffset: Int, size: Int): kotlin.Float {
+    if (FloatTensor.Companion.USE_VECTOR_API) {
+      return vectorDot(this, thisOffset, that as ArrayFloatTensor, thatOffset, size)
+    } else {
+      return FloatTensor.Companion.scalarDot(this, thisOffset, that, thatOffset, size)
     }
+  }
 
-    @Override public long size() { return size; }
-    @Override public void setFloat(int index, float value) { throw new UnsupportedOperationException("setFloat"); }
-    @Override
-    FloatVector getFloatVector(VectorSpecies<Float> species, int index) { throw new UnsupportedOperationException("getFloatVector"); }
-    @Override public GGMLType type() { return GGMLType.BF16; }
-
-    @Override
-    public float getFloat(long index) {
-        assert 0 <= index && index < size;
-        short bits = readShort(memorySegment, (long) index * 2);
-        return Float.intBitsToFloat(bits << 16);
+  companion object {
+    private fun vectorDot(
+      thiz: BF16FloatTensor,
+      thisOffset: Int,
+      that: ArrayFloatTensor,
+      thatOffset: Int,
+      size: Int
+    ): kotlin.Float {
+      assert(
+        Objects.requireNonNull<VectorSpecies<Short>?>(FloatTensor.Companion.S_SPECIES_HALF)
+          .length() == Objects.requireNonNull<VectorSpecies<kotlin.Float>?>(FloatTensor.Companion.F_SPECIES).length()
+      )
+      var `val` =
+        FloatVector.zero(Objects.requireNonNull<VectorSpecies<kotlin.Float>?>(FloatTensor.Companion.F_SPECIES))
+      val upperBound: Int = FloatTensor.Companion.F_SPECIES.loopBound(size)
+      var i = 0
+      while (i < upperBound) {
+        val thatVector = that.getFloatVector(FloatTensor.Companion.F_SPECIES, thatOffset + i)
+        val bfloat16 = ShortVector.fromMemorySegment(
+          FloatTensor.Companion.S_SPECIES_HALF,
+          thiz.memorySegment,
+          (thisOffset + i) * 2L,
+          ByteOrder.LITTLE_ENDIAN
+        )
+        val thizVector = bfloat16
+          .castShape<Int>(Objects.requireNonNull<VectorSpecies<Int>?>(FloatTensor.Companion.I_SPECIES), 0)
+          .lanewise(VectorOperators.LSHL, 16)
+          .reinterpretAsFloats()
+        `val` = thizVector.fma(thatVector, `val`)
+        i += FloatTensor.Companion.F_SPECIES.length()
+      }
+      var result = `val`.reduceLanes(VectorOperators.ADD)
+      if (upperBound < size) {
+        result += FloatTensor.Companion.scalarDot(
+          thiz,
+          thisOffset + upperBound,
+          that,
+          thatOffset + upperBound,
+          size - upperBound
+        )
+      }
+      return result
     }
-
-    @Override
-    public float dot(int thisOffset, FloatTensor that, int thatOffset, int size) {
-        if (FloatTensor.USE_VECTOR_API) {
-            return vectorDot(this, thisOffset, (ArrayFloatTensor) that, thatOffset, size);
-        } else {
-            return FloatTensor.scalarDot(this, thisOffset, that, thatOffset, size);
-        }
-    }
-
-    private static float vectorDot(BF16FloatTensor thiz, int thisOffset, ArrayFloatTensor that, int thatOffset, int size) {
-        assert requireNonNull(S_SPECIES_HALF).length() == requireNonNull(F_SPECIES).length();
-        FloatVector val = FloatVector.zero(requireNonNull(F_SPECIES));
-        int upperBound = F_SPECIES.loopBound(size);
-        for (int i = 0; i < upperBound; i += F_SPECIES.length()) {
-            FloatVector thatVector = that.getFloatVector(F_SPECIES, thatOffset + i);
-            ShortVector bfloat16 = ShortVector.fromMemorySegment(S_SPECIES_HALF, thiz.memorySegment, (thisOffset + i) * 2L, ByteOrder.LITTLE_ENDIAN);
-            FloatVector thizVector = bfloat16
-                    .castShape(requireNonNull(I_SPECIES), 0)
-                    .lanewise(VectorOperators.LSHL, 16)
-                    .reinterpretAsFloats();
-            val = thizVector.fma(thatVector, val);
-        }
-        float result = val.reduceLanes(VectorOperators.ADD);
-        if (upperBound < size) {
-            result += scalarDot(thiz, thisOffset + upperBound, that, thatOffset + upperBound, size - upperBound);
-        }
-        return result;
-    }
+  }
 }

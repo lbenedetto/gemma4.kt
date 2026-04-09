@@ -1,24 +1,24 @@
-package com.llama4j.floattensor;
+package com.llama4j.floattensor
 
-import com.llama4j.gguf.GGMLTensorEntry;
-import com.llama4j.gguf.GGMLType;
+import com.llama4j.gguf.GGMLTensorEntry
+import com.llama4j.gguf.GGMLType
 
-public class FloatTensorFactory {
-  public static FloatTensor create(GGMLType ggmlType, GGMLTensorEntry entry) {
-    long numElements = FloatTensor.numberOfElementsLong(entry.shape());
-    return switch (ggmlType) {
-      case Q8_0 -> new Q8_0FloatTensor(numElements, entry.memorySegment());
-      case Q4_0 -> new Q4_0FloatTensor(numElements, entry.memorySegment());
-      case Q4_1 -> new Q4_1FloatTensor(numElements, entry.memorySegment());
-      case Q5_1 -> new Q5_1FloatTensor(numElements, entry.memorySegment());
-      case Q4_K -> new Q4_KFloatTensor(numElements, entry.memorySegment());
-      case Q5_K -> new Q5_KFloatTensor(numElements, entry.memorySegment());
-      case Q6_K -> new Q6_KFloatTensor(numElements, entry.memorySegment());
-      case F32 -> new F32FloatTensor(numElements, entry.memorySegment());
-      case F16 -> new F16FloatTensor(numElements, entry.memorySegment());
-      case BF16 -> new BF16FloatTensor(numElements, entry.memorySegment());
-      case MXFP4 -> new MXFP4FloatTensor(numElements, entry.memorySegment());
-      default -> throw new UnsupportedOperationException("Quantization format " + ggmlType);
-    };
+object FloatTensorFactory {
+  fun create(ggmlType: GGMLType, entry: GGMLTensorEntry): FloatTensor {
+    val numElements: Long = FloatTensor.Companion.numberOfElementsLong(*entry.shape)
+    return when (ggmlType) {
+      GGMLType.Q8_0 -> Q8_0FloatTensor(numElements, entry.memorySegment)
+      GGMLType.Q4_0 -> Q4_0FloatTensor(numElements, entry.memorySegment)
+      GGMLType.Q4_1 -> Q4_1FloatTensor(numElements, entry.memorySegment)
+      GGMLType.Q5_1 -> Q5_1FloatTensor(numElements, entry.memorySegment)
+      GGMLType.Q4_K -> Q4_KFloatTensor(numElements, entry.memorySegment)
+      GGMLType.Q5_K -> Q5_KFloatTensor(numElements, entry.memorySegment)
+      GGMLType.Q6_K -> Q6_KFloatTensor(numElements, entry.memorySegment)
+      GGMLType.F32 -> F32FloatTensor(numElements, entry.memorySegment)
+      GGMLType.F16 -> F16FloatTensor(numElements, entry.memorySegment)
+      GGMLType.BF16 -> BF16FloatTensor(numElements, entry.memorySegment)
+      GGMLType.MXFP4 -> MXFP4FloatTensor(numElements, entry.memorySegment)
+      else -> throw UnsupportedOperationException("Quantization format " + ggmlType)
+    }
   }
 }
