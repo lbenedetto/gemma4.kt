@@ -7,7 +7,7 @@ import jdk.incubator.vector.VectorShape;
 import jdk.incubator.vector.VectorSpecies;
 
 import java.lang.foreign.MemorySegment;
-import java.lang.reflect.Field;
+import java.lang.foreign.ValueLayout;
 import java.util.Arrays;
 
 public abstract class FloatTensor {
@@ -31,20 +31,8 @@ public abstract class FloatTensor {
         }
     }
 
-    static final sun.misc.Unsafe UNSAFE;
-
-    static {
-        try {
-            Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
-            f.setAccessible(true);
-            UNSAFE = (sun.misc.Unsafe) f.get(null);
-        } catch (NoSuchFieldException | IllegalAccessException e) {
-            throw new RuntimeException(e);
-        }
-    }
-
     static short readShort(MemorySegment memorySegment, long offset) {
-        return UNSAFE.getShort(memorySegment.address() + offset);
+        return memorySegment.get(ValueLayout.JAVA_SHORT_UNALIGNED, offset);
     }
 
     static float readFloat16(MemorySegment memorySegment, long offset) {
@@ -52,11 +40,11 @@ public abstract class FloatTensor {
     }
 
     static byte readByte(MemorySegment memorySegment, long offset) {
-        return UNSAFE.getByte(memorySegment.address() + offset);
+        return memorySegment.get(ValueLayout.JAVA_BYTE, offset);
     }
 
     static float readFloat(MemorySegment memorySegment, long offset) {
-        return UNSAFE.getFloat(memorySegment.address() + offset);
+        return memorySegment.get(ValueLayout.JAVA_FLOAT_UNALIGNED, offset);
     }
 
     public abstract long size();
