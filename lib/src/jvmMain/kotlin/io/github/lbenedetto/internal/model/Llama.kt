@@ -5,7 +5,7 @@ import io.github.lbenedetto.internal.floattensor.parallelFor
 import io.github.lbenedetto.internal.sampler.Sampler
 import io.github.lbenedetto.internal.tokenizer.GemmaTokenizer
 import io.github.lbenedetto.internal.tokenizer.GemmaTokenizer.Companion.replaceControlCharacters
-import java.nio.FloatBuffer
+import io.github.lbenedetto.internal.util.FloatBuffer
 import java.util.function.IntConsumer
 import kotlin.math.max
 import kotlin.math.pow

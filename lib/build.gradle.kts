@@ -13,6 +13,10 @@ kotlin {
     macosArm64()
     linuxX64()
 
+    compilerOptions {
+        freeCompilerArgs.add("-Xexpect-actual-classes")
+    }
+
     sourceSets {
         commonMain {
             kotlin.srcDir("src/commonMain/kotlin")

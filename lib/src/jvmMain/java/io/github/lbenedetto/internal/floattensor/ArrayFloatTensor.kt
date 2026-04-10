@@ -37,7 +37,7 @@ internal class ArrayFloatTensor : AbstractFloatTensor {
     return GGMLType.F32
   }
 
-  override fun fillInPlace(thisOffset: Int, size: Int, value: Float): AbstractFloatTensor {
+  override fun fillInPlace(thisOffset: Int, size: Int, value: Float): FloatTensor {
     Arrays.fill(values, thisOffset, thisOffset + size, value)
     return this
   }
@@ -60,7 +60,7 @@ internal class ArrayFloatTensor : AbstractFloatTensor {
   }
 
   companion object {
-    fun allocate(vararg dims: Int): AbstractFloatTensor {
+    fun allocate(vararg dims: Int): FloatTensor {
       val numberOfElements: Int = numberOfElements(*dims)
       return ArrayFloatTensor(FloatArray(numberOfElements))
     }

@@ -12,7 +12,6 @@ internal abstract class AbstractFloatTensor : FloatTensor {
 
   abstract fun type(): GGMLType?
 
-
   companion object {
     val VECTOR_BIT_SIZE: Int = Integer.getInteger("llama.VectorBitSize", VectorShape.preferredShape().vectorBitSize())
     val USE_VECTOR_API: Boolean = VECTOR_BIT_SIZE != 0

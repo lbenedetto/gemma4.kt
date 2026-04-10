@@ -8,10 +8,10 @@ import io.github.lbenedetto.internal.model.LlamaWeights
 import io.github.lbenedetto.internal.model.RoPE
 import io.github.lbenedetto.internal.tokenizer.GemmaTokenizer
 import io.github.lbenedetto.internal.tokenizer.Vocabulary
+import io.github.lbenedetto.internal.util.FloatBuffer
 import io.github.lbenedetto.internal.util.Timer
+import io.github.lbenedetto.internal.util.wrapWithFloatBuffer
 import java.io.IOException
-import java.nio.ByteOrder
-import java.nio.FloatBuffer
 import java.nio.channels.FileChannel
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption
@@ -153,7 +153,7 @@ internal object ModelLoader {
 
   fun loadWeights(tensorEntries: Map<String, GGMLTensorEntry>, config: LlamaConfiguration): LlamaWeights {
     val ropeFreqsSWA = RoPE.precomputeFreqsCis(config.contextLength, config.headSizeSWA, config.ropeThetaSWA.toDouble())
-    val ropeFreqsBuf = toFloatBuffer(tensorEntries["rope_freqs.weight"]!!)
+    val ropeFreqsBuf = tensorEntries["rope_freqs.weight"]!!.toFloatBuffer()
     val modelRopeFreqs = FloatArray(ropeFreqsBuf.remaining())
     ropeFreqsBuf.get(modelRopeFreqs)
     val ropeFreqsFull = RoPE.precomputeFreqsCisFromFreqs(
@@ -181,7 +181,7 @@ internal object ModelLoader {
     for (i in 0..<config.numberOfLayers) {
       val scaleEntry = tensorEntries["blk.$i.layer_output_scale.weight"]
       if (scaleEntry != null) {
-        layerOutputScale[i] = toFloatBuffer(scaleEntry).get(0)
+        layerOutputScale[i] = scaleEntry.toFloatBuffer().get(0)
       } else {
         layerOutputScale[i] = 1.0f
       }
@@ -198,7 +198,7 @@ internal object ModelLoader {
     if (config.embeddingLengthPerLayer > 0 && tensorEntries.containsKey("per_layer_token_embd.weight")) {
       perLayerTokenEmbd = loadQuantized(tensorEntries["per_layer_token_embd.weight"]!!)
       perLayerModelProj = loadQuantized(tensorEntries["per_layer_model_proj.weight"]!!)
-      perLayerProjNorm = toFloatBuffer(tensorEntries["per_layer_proj_norm.weight"]!!)
+      perLayerProjNorm = tensorEntries["per_layer_proj_norm.weight"]!!.toFloatBuffer()
       perLayerInpGate = loadArrayOfQuantized(config.numberOfLayers) { tensorEntries["blk.$it.inp_gate.weight"] }
       perLayerProj = loadArrayOfQuantized(config.numberOfLayers) { tensorEntries["blk.$it.proj.weight"] }
       perLayerPostNorm = loadArrayOfFloatBuffer(config.numberOfLayers) { tensorEntries["blk.$it.post_norm.weight"] }
@@ -247,12 +247,12 @@ internal object ModelLoader {
       loadArrayOfQuantized(config.numberOfLayers) { tensorEntries["blk.$it.ffn_down.weight"] },
       loadArrayOfQuantized(config.numberOfLayers) { tensorEntries["blk.$it.ffn_up.weight"] },
       loadArrayOfFloatBuffer(config.numberOfLayers) { tensorEntries["blk.$it.post_ffw_norm.weight"] },
-      toFloatBuffer(tensorEntries["output_norm.weight"]!!),
+      tensorEntries["output_norm.weight"]!!.toFloatBuffer(),
       layerOutputScale,
-      FloatBuffer.wrap(ropeFreqsFull.first),
-      FloatBuffer.wrap(ropeFreqsFull.second),
-      FloatBuffer.wrap(ropeFreqsSWA.first),
-      FloatBuffer.wrap(ropeFreqsSWA.second),
+      wrapWithFloatBuffer(ropeFreqsFull.first),
+      wrapWithFloatBuffer(ropeFreqsFull.second),
+      wrapWithFloatBuffer(ropeFreqsSWA.first),
+      wrapWithFloatBuffer(ropeFreqsSWA.second),
       if (tensorEntries.containsKey("output.weight"))
         loadQuantized(tensorEntries["output.weight"]!!)
       else
@@ -279,13 +279,6 @@ internal object ModelLoader {
   }
 
   fun loadArrayOfFloatBuffer(size: Int, getTensorEntry: IntFunction<GGMLTensorEntry>): Array<FloatBuffer> {
-    return Array(size) { toFloatBuffer(getTensorEntry.apply(it)) }
-  }
-
-  fun toFloatBuffer(tensorEntry: GGMLTensorEntry): FloatBuffer {
-    return when (val ggmlType = tensorEntry.ggmlType) {
-      GGMLType.F32 -> tensorEntry.memorySegment.asByteBuffer().order(ByteOrder.LITTLE_ENDIAN).asFloatBuffer()
-      else -> throw UnsupportedOperationException("Conversion to $ggmlType")
-    }
+    return Array(size) { getTensorEntry.apply(it).toFloatBuffer() }
   }
 }

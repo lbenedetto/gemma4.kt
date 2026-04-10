@@ -32,7 +32,7 @@ internal object AOT {
         )
         // Read rope_freqs from model file
         val tmpEntries = GGUF.loadTensors(fileChannel, gguf.tensorDataOffset, gguf.tensorInfos)
-        val ropeFreqsBuf = ModelLoader.toFloatBuffer(tmpEntries["rope_freqs.weight"]!!)
+        val ropeFreqsBuf = tmpEntries["rope_freqs.weight"]!!.toFloatBuffer()
         val modelRopeFreqs = FloatArray(ropeFreqsBuf.remaining())
         ropeFreqsBuf.get(modelRopeFreqs)
         val ropeFreqsFull = RoPE.precomputeFreqsCisFromFreqs(
