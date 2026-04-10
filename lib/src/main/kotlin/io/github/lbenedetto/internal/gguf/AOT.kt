@@ -4,7 +4,6 @@ import io.github.lbenedetto.api.Config.DEFAULT_MAX_TOKENS
 import io.github.lbenedetto.internal.model.Llama
 import io.github.lbenedetto.internal.model.RoPE
 import io.github.lbenedetto.internal.util.Timer
-import org.jetbrains.annotations.Contract
 import java.io.IOException
 import java.nio.channels.FileChannel
 import java.nio.file.Files
@@ -14,7 +13,6 @@ import java.nio.file.StandardOpenOption
 internal object AOT {
   private val PRELOADED_GGUF = preLoadGGUF(System.getProperty("gemma4.PreloadGGUF"))
 
-  @Contract("null -> null")
   private fun preLoadGGUF(modelPath: String?): PartialModel? {
     if (modelPath.isNullOrEmpty()) {
       return null

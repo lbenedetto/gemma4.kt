@@ -25,3 +25,12 @@ java {
 tasks.withType<JavaCompile>().configureEach {
     options.compilerArgs.add("--add-modules=jdk.incubator.vector")
 }
+
+tasks.named<JavaCompile>("compileJava") {
+    val kotlinCompile = tasks.named<org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile>("compileKotlin")
+    dependsOn(kotlinCompile)
+    val kotlinOutputDir = kotlinCompile.flatMap { it.destinationDirectory }
+    options.compilerArgumentProviders.add(org.gradle.process.CommandLineArgumentProvider {
+        listOf("--patch-module", "io.github.lbenedetto.gemma4kt=${kotlinOutputDir.get().asFile}")
+    })
+}
