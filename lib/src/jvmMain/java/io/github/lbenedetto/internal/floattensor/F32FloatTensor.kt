@@ -1,5 +1,6 @@
 package io.github.lbenedetto.internal.floattensor
 
+import io.github.lbenedetto.internal.floattensor.FloatTensor.Companion.scalarDot
 import io.github.lbenedetto.internal.gguf.GGMLType
 import jdk.incubator.vector.FloatVector
 import jdk.incubator.vector.VectorOperators
@@ -11,7 +12,7 @@ import java.nio.ByteOrder
 internal class F32FloatTensor(
   override val size: Long,
   private val memorySegment: MemorySegment
-) : FloatTensor() {
+) : AbstractFloatTensor() {
 
   override fun getFloat(index: Long): Float {
     return memorySegment.get(ValueLayout.JAVA_FLOAT_UNALIGNED, index * Float.SIZE_BYTES)

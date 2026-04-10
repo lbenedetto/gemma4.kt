@@ -1,5 +1,7 @@
 package io.github.lbenedetto.internal.floattensor
 
+import io.github.lbenedetto.internal.floattensor.FloatTensor.Companion.scalarDot
+import io.github.lbenedetto.internal.floattensor.FloatTensor.Companion.toUnsignedInt
 import io.github.lbenedetto.internal.gguf.GGMLType
 import jdk.incubator.vector.ByteVector
 import jdk.incubator.vector.FloatVector
@@ -12,7 +14,7 @@ import kotlin.math.min
 internal class Q4_1FloatTensor(
   override val size: Long,
   val memorySegment: MemorySegment
-) : FloatTensor() {
+) : AbstractFloatTensor() {
 
   override fun setFloat(index: Int, value: Float) {
     throw UnsupportedOperationException("setFloat")

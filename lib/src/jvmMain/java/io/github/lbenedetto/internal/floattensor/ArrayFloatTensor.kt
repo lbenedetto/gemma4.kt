@@ -1,5 +1,7 @@
 package io.github.lbenedetto.internal.floattensor
 
+import io.github.lbenedetto.internal.floattensor.FloatTensor.Companion.numberOfElements
+import io.github.lbenedetto.internal.floattensor.FloatTensor.Companion.scalarDot
 import io.github.lbenedetto.internal.gguf.GGMLType
 import jdk.incubator.vector.FloatVector
 import jdk.incubator.vector.VectorOperators
@@ -7,7 +9,7 @@ import jdk.incubator.vector.VectorSpecies
 import java.nio.FloatBuffer
 import java.util.*
 
-internal class ArrayFloatTensor : FloatTensor {
+internal class ArrayFloatTensor : AbstractFloatTensor {
   override val size: Long
   val values: FloatArray
 
@@ -35,7 +37,7 @@ internal class ArrayFloatTensor : FloatTensor {
     return GGMLType.F32
   }
 
-  override fun fillInPlace(thisOffset: Int, size: Int, value: Float): FloatTensor {
+  override fun fillInPlace(thisOffset: Int, size: Int, value: Float): AbstractFloatTensor {
     Arrays.fill(values, thisOffset, thisOffset + size, value)
     return this
   }
@@ -58,7 +60,7 @@ internal class ArrayFloatTensor : FloatTensor {
   }
 
   companion object {
-    fun allocate(vararg dims: Int): FloatTensor {
+    fun allocate(vararg dims: Int): AbstractFloatTensor {
       val numberOfElements: Int = numberOfElements(*dims)
       return ArrayFloatTensor(FloatArray(numberOfElements))
     }

@@ -1,5 +1,6 @@
 package io.github.lbenedetto.internal.floattensor
 
+import io.github.lbenedetto.internal.floattensor.FloatTensor.Companion.scalarDot
 import io.github.lbenedetto.internal.gguf.GGMLType
 import jdk.incubator.vector.FloatVector
 import jdk.incubator.vector.ShortVector
@@ -11,7 +12,7 @@ import java.nio.ByteOrder
 internal class BF16FloatTensor(
   override val size: Long,
   val memorySegment: MemorySegment
-) : FloatTensor() {
+) : AbstractFloatTensor() {
 
   override fun setFloat(index: Int, value: Float) {
     throw UnsupportedOperationException("setFloat")
