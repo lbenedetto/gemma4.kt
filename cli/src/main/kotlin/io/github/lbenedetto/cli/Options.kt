@@ -126,7 +126,7 @@ data class Options(
               "--color" -> colorMode = nextArg.lowercase()
               "--think" -> {
                 val thinkMode = nextArg.lowercase()
-                thinkInline = mutableListOf("inline", "stdout").contains(thinkMode)
+                thinkInline = thinkMode == "inline" || thinkMode == "stdout"
                 when (thinkMode) {
                   "on", "true", "inline", "stdout" -> think = true
                   "off", "false" -> think = false

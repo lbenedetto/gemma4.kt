@@ -189,19 +189,18 @@ internal class GGUF private constructor(reader: ChannelReader) {
     private const val GGUF_MAGIC = 0x46554747
     private const val DEFAULT_ALIGNMENT = 32 // must be a power of 2
     private const val PARSE_BUFFER_SIZE = 1 shl 20
-    private val SUPPORTED_GGUF_VERSIONS = mutableListOf(2, 3)
+    private val SUPPORTED_GGUF_VERSIONS = listOf(2, 3)
 
     @Throws(IOException::class)
     fun loadTensors(
       fileChannel: FileChannel,
       tensorDataOffset: Long,
-      tensorInfos: MutableMap<String, GGUFTensorInfo>
-    ): MutableMap<String, GGMLTensorEntry> {
+      tensorInfos: Map<String, GGUFTensorInfo>
+    ): Map<String, GGMLTensorEntry> {
       val arena = Arena.global()
       val tensorData =
         fileChannel.map(FileChannel.MapMode.READ_ONLY, tensorDataOffset, fileChannel.size() - tensorDataOffset, arena)
-      val tensorEntries: MutableMap<String, GGMLTensorEntry> =
-        HashMap.newHashMap(tensorInfos.size)
+      val tensorEntries = HashMap.newHashMap<String, GGMLTensorEntry>(tensorInfos.size)
       for (entry in tensorInfos.entries) {
         val ti = entry.value
         val numberOfElements: Long = FloatTensor.numberOfElementsLong(*ti.dimensions)

@@ -410,8 +410,8 @@ internal data class Llama(val configuration: LlamaConfiguration, val tokenizer: 
       model: Llama,
       state: LlamaState,
       startPosition: Int,
-      promptTokens: MutableList<Int>,
-      stopTokens: MutableSet<Int>,
+      promptTokens: List<Int>,
+      stopTokens: Set<Int>,
       maxTokens: Int,
       sampler: Sampler,
       echo: Boolean,
@@ -424,7 +424,7 @@ internal data class Llama(val configuration: LlamaConfiguration, val tokenizer: 
       if (maxTokens < 0 || model.configuration.contextLength < maxTokens) {
         maxTokens = model.configuration.contextLength
       }
-      val generatedTokens: MutableList<Int> = ArrayList(maxTokens)
+      val generatedTokens = ArrayList<Int>(maxTokens)
       var token = state.latestToken // current token (initialized to BOS)
       var nextToken: Int
       var promptIndex = 0

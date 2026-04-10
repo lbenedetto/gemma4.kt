@@ -46,15 +46,15 @@ class GemmaModel private constructor(private val model: Llama) {
    */
   fun generate(prompt: String, configure: GenerationConfig.() -> Unit = {}): GenerationResult =
     doGenerate(configure) { config, chatFormat ->
-      val tokens = mutableListOf<Int>()
-      if (config.thinking) {
-        tokens.addAll(chatFormat.encodeSystemThinkingTurn(config.systemPrompt))
-      } else if (config.systemPrompt != null) {
-        tokens.addAll(chatFormat.encodeMessage(Message(Role.SYSTEM, config.systemPrompt!!)))
+      buildList {
+        if (config.thinking) {
+          addAll(chatFormat.encodeSystemThinkingTurn(config.systemPrompt))
+        } else if (config.systemPrompt != null) {
+          addAll(chatFormat.encodeMessage(Message(Role.SYSTEM, config.systemPrompt!!)))
+        }
+        addAll(chatFormat.encodeMessage(Message(Role.USER, prompt)))
+        addAll(chatFormat.encodeHeader(Message(Role.MODEL, "")))
       }
-      tokens.addAll(chatFormat.encodeMessage(Message(Role.USER, prompt)))
-      tokens.addAll(chatFormat.encodeHeader(Message(Role.MODEL, "")))
-      tokens
     }
 
   /**
@@ -73,7 +73,7 @@ class GemmaModel private constructor(private val model: Llama) {
     val chatFormat = GemmaChatFormat(model.tokenizer)
     val state = model.createNewState()
     val sampler = buildSampler(model.configuration.vocabularySize, config)
-    val promptTokens = buildPromptTokens(config, chatFormat).toMutableList()
+    val promptTokens = buildPromptTokens(config, chatFormat).toList()
     val stopTokens = chatFormat.stopTokens
     val (callback, buildResult) = tokenAccumulator(model, config)
 

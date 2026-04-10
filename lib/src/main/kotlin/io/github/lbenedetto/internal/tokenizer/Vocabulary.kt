@@ -1,36 +1,18 @@
 package io.github.lbenedetto.internal.tokenizer
 
-import java.util.*
-import java.util.function.Function
-import java.util.stream.Collectors
-import java.util.stream.IntStream
-
 internal data class Vocabulary(
   val tokens: Array<String>,
   val scores: FloatArray,
-  val tokenToIndex: MutableMap<String, Int>
+  val tokenToIndex: Map<String, Int>
 ) {
   constructor(vocabulary: Array<String>, scores: FloatArray) : this(
-    vocabulary, scores,
-    IntStream.range(0, vocabulary.size)
-      .boxed()
-      .collect(Collectors.toMap(Function { i: Int? -> vocabulary[i!!] }, Function { i: Int? -> i }))
+    tokens = vocabulary,
+    scores = scores,
+    tokenToIndex = vocabulary.withIndex().associate { (i, token) -> token to i }
   )
 
-  operator fun get(tokenIndex: Int): String {
-    return tokens[tokenIndex]
-  }
-
-  fun getIndex(token: String): OptionalInt {
-    val value = tokenToIndex[token]
-    return if (value != null) OptionalInt.of(value) else OptionalInt.empty()
-  }
-
-  fun size(): Int {
-    return tokens.size
-  }
-
-  fun getScore(tokenIndex: Int): Float {
-    return scores[tokenIndex]
-  }
+  operator fun get(tokenIndex: Int): String = tokens[tokenIndex]
+  fun getIndex(token: String): Int? = tokenToIndex[token]
+  fun size(): Int = tokens.size
+  fun getScore(tokenIndex: Int): Float = scores[tokenIndex]
 }

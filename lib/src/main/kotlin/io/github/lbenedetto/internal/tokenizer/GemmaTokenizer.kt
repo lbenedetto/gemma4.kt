@@ -16,13 +16,13 @@ internal class GemmaTokenizer(
     }
 
     init {
-        val endOfTurn = vocabulary.getIndex("<turn|>").orElseThrow()
+        val endOfTurn = vocabulary.getIndex("<turn|>")!!
         for (i in 0..endOfTurn) {
             if (this.tokenType[i] == 1) {
                 this.tokenType[i] = 6
             }
         }
-        this.byte0 = vocabulary.getIndex("<0x00>").orElseThrow()
+        this.byte0 = vocabulary.getIndex("<0x00>")!!
         this.specialTokens = buildSpecialTokens(this.tokenType)
             .associateBy { vocabulary[it] }
     }
@@ -40,7 +40,7 @@ internal class GemmaTokenizer(
             cpi = text.codePointAt(i)
 
             val singleCodepoint = Character.toString(cpi)
-            val id = vocabulary.getIndex(singleCodepoint).orElse(-1)
+            val id = vocabulary.getIndex(singleCodepoint) ?: -1
 
             if (id != -1) {
                 tokens.add(id)
@@ -59,7 +59,7 @@ internal class GemmaTokenizer(
 
             for (i in 0..<tokens.size - 1) {
                 val strBuffer = vocabulary[tokens[i]] + vocabulary[tokens[i + 1]]
-                val id = vocabulary.getIndex(strBuffer).orElse(-1)
+                val id = vocabulary.getIndex(strBuffer) ?: -1
                 if (id != -1 && vocabulary.getScore(id) > bestScore) {
                     bestScore = vocabulary.getScore(id)
                     bestId = id

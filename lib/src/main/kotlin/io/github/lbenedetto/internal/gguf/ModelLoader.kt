@@ -19,7 +19,7 @@ import java.util.*
 import java.util.function.IntFunction
 
 internal object ModelLoader {
-  private fun loadVocabulary(metadata: MutableMap<String, Any>): Vocabulary {
+  private fun loadVocabulary(metadata: Map<String, Any>): Vocabulary {
     val tokens = metadata["tokenizer.ggml.tokens"]!! as Array<String>
     val scores = metadata["tokenizer.ggml.scores"] as FloatArray
     return Vocabulary(tokens, scores)
@@ -142,7 +142,7 @@ internal object ModelLoader {
       return Llama(config, tokenizer, null)
     }
 
-    val tensorEntries: MutableMap<String, GGMLTensorEntry> = GGUF.loadTensors(
+    val tensorEntries = GGUF.loadTensors(
       fileChannel!!,
       gguf.tensorDataOffset,
       tensorInfos
@@ -151,7 +151,7 @@ internal object ModelLoader {
     return Llama(config, tokenizer, qw)
   }
 
-  fun loadWeights(tensorEntries: MutableMap<String, GGMLTensorEntry>, config: LlamaConfiguration): LlamaWeights {
+  fun loadWeights(tensorEntries: Map<String, GGMLTensorEntry>, config: LlamaConfiguration): LlamaWeights {
     val ropeFreqsSWA = RoPE.precomputeFreqsCis(config.contextLength, config.headSizeSWA, config.ropeThetaSWA.toDouble())
     val ropeFreqsBuf = toFloatBuffer(tensorEntries["rope_freqs.weight"]!!)
     val modelRopeFreqs = FloatArray(ropeFreqsBuf.remaining())
@@ -166,7 +166,7 @@ internal object ModelLoader {
   }
 
   fun loadWeightsWithRoPE(
-    tensorEntries: MutableMap<String, GGMLTensorEntry>,
+    tensorEntries: Map<String, GGMLTensorEntry>,
     config: LlamaConfiguration,
     ropeFreqsSWA: Pair<FloatArray, FloatArray>,
     ropeFreqsFull: Pair<FloatArray, FloatArray>
@@ -264,7 +264,7 @@ internal object ModelLoader {
     )
   }
 
-  private fun createTokenizer(metadata: MutableMap<String, Any>, vocabulary: Vocabulary): GemmaTokenizer {
+  private fun createTokenizer(metadata: Map<String, Any>, vocabulary: Vocabulary): GemmaTokenizer {
     val tokenTypes = metadata["tokenizer.ggml.token_type"] as IntArray
     return GemmaTokenizer(vocabulary, tokenTypes)
   }

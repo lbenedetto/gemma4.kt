@@ -26,23 +26,28 @@ internal object AOT {
         // Precompute RoPE frequencies at build time (pure Java arrays, survives native-image)
         val config = base.configuration
         val ropeFreqsSWA = RoPE.precomputeFreqsCis(
-          config.contextLength, config.headSizeSWA, config.ropeThetaSWA.toDouble()
+          contextLength = config.contextLength,
+          headSize = config.headSizeSWA,
+          theta = config.ropeThetaSWA.toDouble()
         )
         // Read rope_freqs from model file
-        val ropeFreqsFull: Pair<FloatArray, FloatArray>?
-        val tmpEntries: MutableMap<String, GGMLTensorEntry> =
-          GGUF.loadTensors(fileChannel, gguf.tensorDataOffset, gguf.tensorInfos)
-        val ropeFreqsBuf =
-          ModelLoader.toFloatBuffer(tmpEntries["rope_freqs.weight"]!!)
+        val tmpEntries = GGUF.loadTensors(fileChannel, gguf.tensorDataOffset, gguf.tensorInfos)
+        val ropeFreqsBuf = ModelLoader.toFloatBuffer(tmpEntries["rope_freqs.weight"]!!)
         val modelRopeFreqs = FloatArray(ropeFreqsBuf.remaining())
         ropeFreqsBuf.get(modelRopeFreqs)
-        ropeFreqsFull = RoPE.precomputeFreqsCisFromFreqs(
-          config.contextLength, config.headSizeFull, config.ropeTheta.toDouble(), modelRopeFreqs
+        val ropeFreqsFull = RoPE.precomputeFreqsCisFromFreqs(
+          contextLength = config.contextLength,
+          headSize = config.headSizeFull,
+          ropeTheta = config.ropeTheta.toDouble(),
+          ropeFreqFactors = modelRopeFreqs
         )
         return PartialModel(
-          path.fileName.toString(), base,
-          gguf.tensorDataOffset, gguf.tensorInfos,
-          ropeFreqsSWA, ropeFreqsFull
+          modelFileName = path.fileName.toString(),
+          model = base,
+          tensorDataOffset = gguf.tensorDataOffset,
+          tensorInfos = gguf.tensorInfos,
+          ropeFreqsSWA = ropeFreqsSWA,
+          ropeFreqsFull = ropeFreqsFull
         )
       }
     } catch (e: IOException) {
@@ -61,7 +66,7 @@ internal object AOT {
     val baseModel = preLoaded.model
     Timer.log("Load tensors from pre-loaded model").use {
       FileChannel.open(modelPath, StandardOpenOption.READ).use { fileChannel ->
-        val tensorEntries: MutableMap<String, GGMLTensorEntry> =
+        val tensorEntries: Map<String, GGMLTensorEntry> =
           GGUF.loadTensors(fileChannel, preLoaded.tensorDataOffset, preLoaded.tensorInfos)
         val weights = ModelLoader.loadWeightsWithRoPE(
           tensorEntries, baseModel.configuration,
