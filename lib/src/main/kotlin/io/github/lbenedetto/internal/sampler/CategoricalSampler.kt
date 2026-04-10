@@ -4,7 +4,7 @@ import io.github.lbenedetto.internal.floattensor.FloatTensor
 import java.util.random.RandomGenerator
 
 @JvmRecord
-data class CategoricalSampler(val rng: RandomGenerator) : Sampler {
+internal data class CategoricalSampler(val rng: RandomGenerator) : Sampler {
   override fun sampleToken(logits: FloatTensor): Int {
     val random0to1 = rng.nextFloat(1f)
     var cdf = 0.0f

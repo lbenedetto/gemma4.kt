@@ -2,7 +2,7 @@ package io.github.lbenedetto.internal.model
 
 import io.github.lbenedetto.internal.tokenizer.GemmaTokenizer
 
-class GemmaChatFormat(private val tokenizer: GemmaTokenizer) {
+internal class GemmaChatFormat(private val tokenizer: GemmaTokenizer) {
   private val beginOfSentence: Int
   private val startOfTurn: Int
   private val endOfTurn: Int

@@ -2,7 +2,7 @@ package io.github.lbenedetto.internal.model
 
 import java.util.*
 
-class LlamaConfiguration(
+internal class LlamaConfiguration(
   val embeddingLength: Int, // per-layer (shared MLP)
   val feedForwardLength: IntArray, val numberOfLayers: Int,
   val numberOfHeads: Int, // per-layer KV head count

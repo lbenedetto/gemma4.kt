@@ -11,7 +11,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption
 
-object AOT {
+internal object AOT {
   private val PRELOADED_GGUF = preLoadGGUF(System.getProperty("gemma4.PreloadGGUF"))
 
   @Contract("null -> null")

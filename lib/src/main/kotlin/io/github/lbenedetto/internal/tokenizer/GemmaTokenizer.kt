@@ -3,7 +3,7 @@ package io.github.lbenedetto.internal.tokenizer
 import java.nio.charset.StandardCharsets
 import java.util.*
 
-class GemmaTokenizer(
+internal class GemmaTokenizer(
     private val vocabulary: Vocabulary,
     tokenType: IntArray
 ) {

@@ -9,7 +9,7 @@ private fun isPowerOf2(n: Int): Boolean {
   return n > 0 && (n and (n - 1)) == 0
 }
 
-enum class GGMLType(
+internal enum class GGMLType(
   val typeSize: Int,
   val blockSize: Int = 1
 ) {

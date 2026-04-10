@@ -1,7 +1,6 @@
 package io.github.lbenedetto.internal.model
 
-@JvmRecord
-data class Role(val name: String) {
+internal data class Role(val name: String) {
   override fun toString(): String {
     return name
   }

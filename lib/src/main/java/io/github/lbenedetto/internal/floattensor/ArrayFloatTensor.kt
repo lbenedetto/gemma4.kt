@@ -7,7 +7,7 @@ import jdk.incubator.vector.VectorSpecies
 import java.nio.FloatBuffer
 import java.util.*
 
-class ArrayFloatTensor : FloatTensor {
+internal class ArrayFloatTensor : FloatTensor {
   override val size: Long
   val values: FloatArray
 

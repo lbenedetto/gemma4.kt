@@ -5,7 +5,7 @@ import java.util.function.Function
 import java.util.stream.Collectors
 import java.util.stream.IntStream
 
-data class Vocabulary(
+internal data class Vocabulary(
   val tokens: Array<String>,
   val scores: FloatArray,
   val tokenToIndex: MutableMap<String, Int>

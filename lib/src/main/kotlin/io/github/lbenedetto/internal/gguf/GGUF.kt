@@ -8,7 +8,7 @@ import java.nio.channels.FileChannel
 import java.nio.charset.StandardCharsets
 import java.nio.file.Path
 
-class GGUF private constructor(reader: ChannelReader) {
+internal class GGUF private constructor(reader: ChannelReader) {
   private var tensorCount = 0 // uint64_t
   var alignment: Int = 0
     get() {

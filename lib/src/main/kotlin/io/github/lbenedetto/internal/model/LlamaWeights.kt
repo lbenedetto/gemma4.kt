@@ -3,7 +3,7 @@ package io.github.lbenedetto.internal.model
 import io.github.lbenedetto.internal.floattensor.FloatTensor
 import java.nio.FloatBuffer
 
-class LlamaWeights(
+internal class LlamaWeights(
   val tokenEmbeddingTable: FloatTensor,
   // (layer, dim)
   val rmsAttWeight: Array<FloatBuffer>,

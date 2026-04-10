@@ -12,8 +12,7 @@ import kotlin.math.pow
 import kotlin.math.sqrt
 import kotlin.math.tanh
 
-@JvmRecord
-data class Llama(val configuration: LlamaConfiguration, val tokenizer: GemmaTokenizer, val weights: LlamaWeights?) {
+internal data class Llama(val configuration: LlamaConfiguration, val tokenizer: GemmaTokenizer, val weights: LlamaWeights?) {
   fun createNewState(): LlamaState {
     val state = LlamaState(this.configuration)
     state.latestToken = tokenizer.specialTokens["<bos>"]!!

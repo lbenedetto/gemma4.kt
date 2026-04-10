@@ -2,7 +2,6 @@ package io.github.lbenedetto.internal.gguf
 
 import io.github.lbenedetto.internal.model.Llama
 
-@JvmRecord
 internal data class PartialModel(
   val modelFileName: String,
   val model: Llama,

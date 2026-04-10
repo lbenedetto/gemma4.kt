@@ -3,7 +3,7 @@ package io.github.lbenedetto.internal.sampler
 import io.github.lbenedetto.internal.floattensor.FloatTensor
 import java.util.random.RandomGenerator
 
-class ToppSampler(maxNumberOfElements: Int, val topp: Float, val rng: RandomGenerator) : Sampler {
+internal class ToppSampler(maxNumberOfElements: Int, val topp: Float, val rng: RandomGenerator) : Sampler {
   val indices: IntArray = IntArray(maxNumberOfElements)
 
   override fun sampleToken(logits: FloatTensor): Int {

@@ -4,7 +4,7 @@ import io.github.lbenedetto.internal.floattensor.ArrayFloatTensor
 import io.github.lbenedetto.internal.floattensor.FloatTensor
 import java.util.stream.IntStream
 
-class LlamaState internal constructor(config: LlamaConfiguration) {
+internal class LlamaState internal constructor(config: LlamaConfiguration) {
   val x: FloatTensor // activation at current time stamp (embeddingLength,)
   val xb: FloatTensor // same, but inside a residual branch (embeddingLength,)
   val xbK: FloatTensor // attention output before wo projection (max queryDim,)

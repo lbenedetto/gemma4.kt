@@ -2,7 +2,7 @@ package io.github.lbenedetto.internal.sampler
 
 import io.github.lbenedetto.internal.floattensor.FloatTensor
 
-fun interface Sampler {
+internal fun interface Sampler {
   fun sampleToken(logits: FloatTensor): Int
 
   companion object {

@@ -3,7 +3,7 @@ package io.github.lbenedetto.internal.util
 import java.lang.AutoCloseable
 import java.util.concurrent.TimeUnit
 
-interface Timer : AutoCloseable {
+internal interface Timer : AutoCloseable {
   override fun close() // no Exception
 
   companion object {

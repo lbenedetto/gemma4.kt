@@ -3,7 +3,7 @@ package io.github.lbenedetto.internal.floattensor
 import io.github.lbenedetto.internal.gguf.GGMLTensorEntry
 import io.github.lbenedetto.internal.gguf.GGMLType
 
-object FloatTensorFactory {
+internal object FloatTensorFactory {
   fun create(ggmlType: GGMLType, entry: GGMLTensorEntry): FloatTensor {
     val numElements: Long = FloatTensor.numberOfElementsLong(*entry.shape)
     return when (ggmlType) {

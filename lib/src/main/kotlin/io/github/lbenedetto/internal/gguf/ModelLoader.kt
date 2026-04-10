@@ -8,6 +8,7 @@ import io.github.lbenedetto.internal.model.LlamaWeights
 import io.github.lbenedetto.internal.model.RoPE
 import io.github.lbenedetto.internal.tokenizer.GemmaTokenizer
 import io.github.lbenedetto.internal.tokenizer.Vocabulary
+import io.github.lbenedetto.internal.util.Timer
 import java.io.IOException
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
@@ -17,7 +18,7 @@ import java.nio.file.StandardOpenOption
 import java.util.*
 import java.util.function.IntFunction
 
-object ModelLoader {
+internal object ModelLoader {
   private fun loadVocabulary(metadata: MutableMap<String, Any>): Vocabulary {
     val tokens = metadata["tokenizer.ggml.tokens"]!! as Array<String>
     val scores = metadata["tokenizer.ggml.scores"] as FloatArray

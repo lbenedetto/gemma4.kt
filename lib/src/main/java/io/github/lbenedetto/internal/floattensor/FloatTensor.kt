@@ -9,7 +9,7 @@ import java.lang.foreign.ValueLayout
 import java.util.*
 import kotlin.math.exp
 
-abstract class FloatTensor {
+internal abstract class FloatTensor {
   abstract val size: Long
 
   abstract fun getFloat(index: Long): Float
