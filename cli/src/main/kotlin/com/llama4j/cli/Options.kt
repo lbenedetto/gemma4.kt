@@ -1,4 +1,4 @@
-package com.llama4j
+package com.llama4j.cli
 
 import com.llama4j.api.Config.DEFAULT_MAX_TOKENS
 import java.io.PrintStream

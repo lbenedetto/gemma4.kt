@@ -113,10 +113,10 @@ println(result.text)
 
 ## Command-line interface
 
-The `app` module provides a CLI:
+The `cli` module provides a CLI:
 
 ```
-./gradlew :app:run --args="--model gemma-4-E2B-it-Q8_0.gguf --prompt \"Tell me a joke\""
+./gradlew :cli:run --args="--model gemma-4-E2B-it-Q8_0.gguf --prompt \"Tell me a joke\""
 ```
 
 ### Options

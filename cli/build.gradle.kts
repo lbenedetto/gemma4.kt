@@ -27,7 +27,7 @@ tasks.withType<JavaExec> {
 
 tasks.register<Jar>("fatJar") {
     group = "build"
-    description = "Assembles a fat JAR containing app and all runtime dependencies"
+    description = "Assembles a fat JAR containing cli and all runtime dependencies"
     archiveFileName.set("gemma4.jar")
 
     manifest {
