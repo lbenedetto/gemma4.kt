@@ -8,3 +8,12 @@ import platform.posix.stderr
 internal actual fun printlnStderr(message: String) {
   fputs("$message\n", stderr)
 }
+
+/**
+ * Never throws exception since we have no mechananism of enabling assertions on native platform
+ */
+internal actual inline fun assert(condition: Boolean, lazyMessage: () -> Any) {
+  if (!condition) {
+    printlnStderr(lazyMessage().toString())
+  }
+}

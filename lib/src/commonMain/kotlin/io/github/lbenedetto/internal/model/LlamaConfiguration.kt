@@ -1,18 +1,20 @@
 package io.github.lbenedetto.internal.model
 
-import java.util.*
-
 internal class LlamaConfiguration(
   val embeddingLength: Int, // per-layer (shared MLP)
-  val feedForwardLength: IntArray, val numberOfLayers: Int,
+  val feedForwardLength: IntArray,
+  val numberOfLayers: Int,
   val numberOfHeads: Int, // per-layer KV head count
-  val numberOfKeyValueHeadsPerLayer: IntArray, val vocabularySize: Int,
-  val contextLength: Int, val rmsNormEps: Float, // full attention RoPE theta
+  val numberOfKeyValueHeadsPerLayer: IntArray,
+  val vocabularySize: Int,
+  val contextLength: Int,
+  val rmsNormEps: Float, // full attention RoPE theta
   val ropeTheta: Float, // SWA RoPE theta
   val ropeThetaSWA: Float,
   // head size for full attention layers
   val headSizeFull: Int, // head size for SWA layers
-  val headSizeSWA: Int, val slidingWindow: Int,
+  val headSizeSWA: Int,
+  val slidingWindow: Int,
   val logitSoftcapping: Float, // per-layer: true = SWA, false = full attention
   val isSWA: BooleanArray, // first N layers have own KV cache, rest reuse
   val nLayerKvFromStart: Int,
@@ -57,18 +59,31 @@ internal class LlamaConfiguration(
   }
 
   fun maxHiddenDim(): Int {
-    return Arrays.stream(feedForwardLength).max().orElseThrow()
+    return feedForwardLength.max()
   }
 
   fun withContextLength(newContextLength: Int): LlamaConfiguration {
     return LlamaConfiguration(
-      embeddingLength, feedForwardLength, numberOfLayers,
-      numberOfHeads, numberOfKeyValueHeadsPerLayer, vocabularySize,
-      newContextLength, rmsNormEps, ropeTheta, ropeThetaSWA,
-      headSizeFull, headSizeSWA, slidingWindow,
-      logitSoftcapping, isSWA, nLayerKvFromStart,
+      embeddingLength,
+      feedForwardLength,
+      numberOfLayers,
+      numberOfHeads,
+      numberOfKeyValueHeadsPerLayer,
+      vocabularySize,
+      newContextLength,
+      rmsNormEps,
+      ropeTheta,
+      ropeThetaSWA,
+      headSizeFull,
+      headSizeSWA,
+      slidingWindow,
+      logitSoftcapping,
+      isSWA,
+      nLayerKvFromStart,
       embeddingLengthPerLayer,
-      expertCount, expertUsedCount, expertFeedForwardLength
+      expertCount,
+      expertUsedCount,
+      expertFeedForwardLength
     )
   }
 }

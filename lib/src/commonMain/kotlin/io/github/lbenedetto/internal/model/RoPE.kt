@@ -1,5 +1,6 @@
 package io.github.lbenedetto.internal.model
 
+import io.github.lbenedetto.internal.util.assert
 import kotlin.math.cos
 import kotlin.math.pow
 import kotlin.math.sin
