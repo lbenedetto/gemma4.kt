@@ -1,6 +1,6 @@
 package com.llama4j
 
-import com.llama4j.Config.DEFAULT_MAX_TOKENS
+import com.llama4j.api.Config.DEFAULT_MAX_TOKENS
 import java.io.PrintStream
 import java.nio.file.Path
 import kotlin.system.exitProcess

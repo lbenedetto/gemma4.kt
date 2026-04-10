@@ -1,124 +1,143 @@
-# Gemma4.java
+# gemma4.kt
 
-<p align="center">
-  <img src="https://ai.google.dev/static/gemma/images/gemma4_banner.png">
-</p>
+Gemma 4 inference in pure Kotlin/Java. Supports GGUF models with quantized and
+dense tensor formats. Matrix-vector kernels use Java's Vector API.
 
-<div align="center">
+## Requirements
 
-![Java 21+](https://img.shields.io/badge/Java-21%2B-007396?logo=java&logoColor=white)
-[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-green.svg?logo=apache)](LICENSE)
-[![GraalVM](https://img.shields.io/badge/GraalVM-Native_Image-F29111?labelColor=00758F)](https://www.graalvm.org/latest/reference-manual/native-image/)
-![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey)
+- Java 25+ (Vector API via `--add-modules=jdk.incubator.vector`)
+- A Gemma 4 GGUF model file
 
-Fast, zero-dependency, inference engine for [Gemma 4](https://ai.google.dev/gemma) in pure Java.
+## Library API
 
-</div>
+Add the `lib` module as a dependency. The entry point is `GemmaModel`.
 
-----
+### Loading a model
 
-## Features
-
-- Single file, **no dependencies**, based on [llama3.java](https://github.com/mukel/llama3.java)
-- Supports **all** Gemma 4 model families: `E2B`, `E4B`, `31B`, and `26B-A4B` (MoE)
-- Fast [GGUF format](https://github.com/ggerganov/ggml/blob/master/docs/gguf.md) parser
-- Supported dtypes/quantizations: `F16`, `BF16`, `F32`, `Q4_0`, `Q4_1`, `Q4_K`, `Q5_K`, `Q6_K`, `Q8_0`
-- Matrix-vector kernels using Java's [Vector API](https://openjdk.org/jeps/469)
-- CLI with `--chat` and `--prompt` modes
-- Thinking mode control with `--think off|on|inline`
-- GraalVM Native Image support
-- AOT model preloading for **instant time-to-first-token**
-
-## Setup
-
-Download GGUF models from Hugging Face:
-
-| Model | Architecture | GGUF Repository |
-|-------|-------------|-----------------|
-| E2B | Dense, ~5B total params | [unsloth/gemma-4-E2B-it-GGUF](https://huggingface.co/unsloth/gemma-4-E2B-it-GGUF) |
-| E4B | Dense, ~8B total params | [unsloth/gemma-4-E4B-it-GGUF](https://huggingface.co/unsloth/gemma-4-E4B-it-GGUF) |
-| 31B | Dense | [unsloth/gemma-4-31B-it-GGUF](https://huggingface.co/unsloth/gemma-4-31B-it-GGUF) |
-| 26B-A4B | Mixture of Experts (MoE) | [unsloth/gemma-4-26B-A4B-it-GGUF](https://huggingface.co/unsloth/gemma-4-26B-A4B-it-GGUF) |
-
-#### Optional: pure quantizations
-
-`Q4_0` files are often mixed-quant in practice (for example, `token_embd.weight` and `output.weight` may use `Q6_K`).
-A pure quantization is not required, but can be generated from an F32/F16/BF16 GGUF source with `llama-quantize` from [llama.cpp](https://github.com/ggml-org/llama.cpp):
-
-```bash
-./llama-quantize --pure ./gemma-4-E2B-it-BF16.gguf ./gemma-4-E2B-it-Q4_0.gguf Q4_0
+```kotlin
+val model = GemmaModel.load(Path.of("gemma-4-E2B-it-Q8_0.gguf"))
 ```
 
-Pick any supported target quantization, for example `Q4_0`, `Q4_1`, `Q4_K`, `Q5_K`, `Q6_K`, or `Q8_0`.
+An optional `contextLength` parameter overrides the model's built-in context window:
 
-
-## Build and run
-
-Java 21+ is required, in particular for the [`MemorySegment` mmap-ing feature](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/nio/channels/FileChannel.html#map(java.nio.channels.FileChannel.MapMode,long,long,java.lang.foreign.Arena)).
-
-[`jbang`](https://www.jbang.dev/) is a good fit for this use case.
-
-No-setup one-liner, no git clone, no manual model download required ... ~5GB download once, then cached by `jbang`:
-```bash
-jbang gemma4@mukel \
-    --model %https://hf.co/unsloth/gemma-4-E2B-it-GGUF/resolve/main/gemma-4-E2B-it-Q8_0.gguf \
-    --system-prompt "like Master Yoda, reply you must" \
-    --chat
-```
-Alternatively:
-```
-jbang Gemma4.java --help
-jbang Gemma4.java --model ./gemma-4-E2B-it-Q4_0.gguf --chat
-jbang Gemma4.java --model ./gemma-4-E2B-it-Q4_0.gguf --prompt "Explain quantum computing like I'm five"
+```kotlin
+val model = GemmaModel.load(Path.of("gemma-4-E2B-it-Q8_0.gguf"), contextLength = 8192)
 ```
 
-Or run it directly (still via [`jbang`](https://www.jbang.dev/)):
-```bash 
-chmod +x Gemma4.java
-./Gemma4.java --help
+### Single-turn generation
+
+```kotlin
+val result = model.generate("Why is the sky blue?")
+println(result.text)
 ```
 
-#### Optional: Makefile
+### Generation options
 
-A simple [Makefile](./Makefile) is provided. Run `make jar` to produce `gemma4.jar`.
+All options are set via a configuration DSL block:
 
-Run the resulting `gemma4.jar` as follows: 
-```bash
-java --enable-preview --add-modules jdk.incubator.vector -jar gemma4.jar --help
+```kotlin
+val result = model.generate("Write a haiku") {
+    temperature = 0.7f   // 0 = greedy, higher = more random (default: 1.0)
+    topP = 0.9f          // nucleus sampling threshold (default: 0.95)
+    maxTokens = 256      // default: 1024
+    systemPrompt = "You are a creative writing assistant."
+    seed = 42L           // for reproducibility
+}
 ```
 
-### GraalVM Native Image
+### Streaming
 
-Compile with `make native` to produce a `gemma4` executable, then:
+Set `onToken` to receive decoded text pieces as they are generated:
 
-```bash
-./gemma4 --model ./gemma-4-E2B-it-Q4_0.gguf --chat
+```kotlin
+model.generate("Tell me a joke") {
+    temperature = 0.8f
+    onToken = { piece -> print(piece) }
+}
 ```
 
-### AOT model preloading
+`onToken` is called during generation; `result.text` always contains the complete
+response regardless of whether streaming is used.
 
-`Gemma4.java` supports AOT model preloading to reduce parse overhead and time-to-first-token (TTFT).
+### Thinking mode
 
-To AOT pre-load a GGUF model:
-```bash
-PRELOAD_GGUF=/path/to/model.gguf make native
+When enabled, the model reasons internally before answering. Thinking tokens are
+excluded from `result.text` and the `onToken` stream, but available separately:
+
+```kotlin
+val result = model.generate("What is 17 × 34?") {
+    thinking = true
+}
+println(result.text)     // final answer
+println(result.thinking) // internal reasoning (null if model doesn't support it)
 ```
 
-A larger specialized binary is generated with parse overhead removed for that specific model.
-It can still run other models with the usual parsing overhead.
+### Multi-turn chat
 
-## Benchmarks
+`chat()` returns a `ChatSession` that retains conversation history and `LlamaState`
+across turns:
 
-<p align="center">
-  <img src="https://github.com/user-attachments/assets/8554de11-c028-4ff4-88b7-b5c0665423da">
-</p>
+```kotlin
+val chat = model.chat {
+    systemPrompt = "You are a helpful assistant."
+    temperature = 0.9f
+}
 
-\*\**Hardware specs: AMD Ryzen 9950X 16C/32T 64GB (6400) Linux 6.18.12.*
+println(chat.send("Hello!").text)
+println(chat.send("What did I just say?").text)  // model has full prior context
+```
 
-[GraalVM 25+](https://www.graalvm.org/downloads) is recommended for the absolute best performance (JIT mode), it provides partial, but good support for the [Vector API](https://openjdk.org/jeps/469), also in Native Image.
+Check context window usage:
 
-By default, the "preferred" vector size is used, it can be force-set with `-Dllama.VectorBitSize=0|128|256|512`, `0` means disabled.
+```kotlin
+println("${chat.contextUsed} / ${chat.contextUsed + chat.contextRemaining} tokens used")
+```
 
-## License
+Call `reset()` to clear history while keeping the configuration and system prompt:
 
-Apache 2.0
+```kotlin
+chat.reset()
+```
+
+### Fill-in-the-middle
+
+For code completion with a known suffix (requires a FIM-capable model):
+
+```kotlin
+val result = model.fillInMiddle(
+    prefix = "fun greet(name: String) = ",
+    suffix = ""
+)
+println(result.text)
+```
+
+## Command-line interface
+
+The `app` module provides a CLI:
+
+```
+./gradlew :app:run --args="--model gemma-4-E2B-it-Q8_0.gguf --prompt \"Tell me a joke\""
+```
+
+### Options
+
+| Option | Description |
+|---|---|
+| `--model`, `-m` | Path to `.gguf` file (required) |
+| `--prompt`, `-p` | Input prompt (required in instruct mode) |
+| `--interactive`, `--chat`, `-i` | Run in interactive chat mode |
+| `--system-prompt`, `-sp` | System prompt |
+| `--temperature` | Sampling temperature (default: 1.0) |
+| `--top-p` | Nucleus sampling threshold (default: 0.95) |
+| `--seed` | Random seed |
+| `--max-tokens`, `-n` | Max tokens to generate (default: 1024) |
+| `--stream` | Stream tokens to stdout (default: true) |
+| `--think` | Thinking mode: `off`, `on` (stderr), `inline` (stdout) |
+| `--color` | Colorize thinking output: `on`, `off`, `auto` (default) |
+
+### Interactive commands
+
+| Command | Description |
+|---|---|
+| `/quit`, `/exit` | Exit |
+| `/context` | Show context token usage |

@@ -16,14 +16,12 @@
 // jbang Gemma4.java --help
 package com.llama4j
 
-import com.llama4j.floattensor.FloatTensor
-import com.llama4j.gguf.AOT
-import com.llama4j.gguf.ModelLoader
-import com.llama4j.model.*
-import com.llama4j.sampler.CategoricalSampler
-import com.llama4j.sampler.Sampler
-import com.llama4j.sampler.ToppSampler
-import com.llama4j.tokenizer.GemmaTokenizer
+import com.llama4j.internal.floattensor.FloatTensor
+import com.llama4j.internal.gguf.AOT
+import com.llama4j.internal.gguf.ModelLoader
+import com.llama4j.internal.model.*
+import com.llama4j.internal.sampler.Sampler
+import com.llama4j.internal.tokenizer.GemmaTokenizer
 import java.io.IOException
 import java.io.PrintStream
 import java.util.*
@@ -38,11 +36,11 @@ object Gemma4 {
     } else {
       val rng = RandomGeneratorFactory.getDefault().create(rngSeed)
       val innerSampler = if (topp <= 0 || topp >= 1) {
-        CategoricalSampler(rng)
+        _root_ide_package_.com.llama4j.internal.sampler.CategoricalSampler(rng)
       } else {
-        ToppSampler(vocabularySize, topp, rng)
+        _root_ide_package_.com.llama4j.internal.sampler.ToppSampler(vocabularySize, topp, rng)
       }
-      sampler = Sampler { logits: FloatTensor? ->
+      sampler = _root_ide_package_.com.llama4j.internal.sampler.Sampler { logits: FloatTensor? ->
         val logitsSize = Math.toIntExact(logits!!.size)
         logits.divideInPlace(0, logitsSize, temperature)
         logits.softmaxInPlace(0, logitsSize)
@@ -179,7 +177,12 @@ object Gemma4 {
     if (options.think) {
       conversationTokens.addAll(chatFormat.encodeSystemThinkingTurn(options.systemPrompt))
     } else if (options.systemPrompt != null) {
-      conversationTokens.addAll(chatFormat.encodeMessage(Message(Role.SYSTEM, options.systemPrompt)))
+      conversationTokens.addAll(chatFormat.encodeMessage(
+        Message(
+          Role.SYSTEM,
+          options.systemPrompt
+        )
+      ))
     }
     var startPosition = 0
     val `in` = Scanner(System.`in`)
@@ -202,8 +205,18 @@ object Gemma4 {
       if (state == null) {
         state = model.createNewState()
       }
-      conversationTokens.addAll(chatFormat.encodeMessage(Message(Role.USER, userText)))
-      conversationTokens.addAll(chatFormat.encodeHeader(Message(Role.MODEL, "")))
+      conversationTokens.addAll(chatFormat.encodeMessage(
+        Message(
+          Role.USER,
+          userText
+        )
+      ))
+      conversationTokens.addAll(chatFormat.encodeHeader(
+        Message(
+          Role.MODEL,
+          ""
+        )
+      ))
 
       val stopTokens = chatFormat.stopTokens
       val printer = streamingPrinter(model.tokenizer, options)
@@ -252,10 +265,25 @@ object Gemma4 {
       if (options.think) {
         promptTokens.addAll(chatFormat.encodeSystemThinkingTurn(options.systemPrompt))
       } else if (options.systemPrompt != null) {
-        promptTokens.addAll(chatFormat.encodeMessage(Message(Role.SYSTEM, options.systemPrompt)))
+        promptTokens.addAll(chatFormat.encodeMessage(
+          Message(
+            Role.SYSTEM,
+            options.systemPrompt
+          )
+        ))
       }
-      promptTokens.addAll(chatFormat.encodeMessage(Message(Role.USER, options.prompt!!)))
-      promptTokens.addAll(chatFormat.encodeHeader(Message(Role.MODEL, "")))
+      promptTokens.addAll(chatFormat.encodeMessage(
+        Message(
+          Role.USER,
+          options.prompt!!
+        )
+      ))
+      promptTokens.addAll(chatFormat.encodeHeader(
+        Message(
+          Role.MODEL,
+          ""
+        )
+      ))
     }
 
     val stopTokens = chatFormat.stopTokens
