@@ -41,4 +41,22 @@ class GenerationConfig {
      * Set to null (the default) to disable streaming.
      */
     var onToken: ((String) -> Unit)? = null
+
+    /**
+     * Called when the model enters a thinking channel (before the first thinking token).
+     * Only fires when [thinking] is true and the model supports thinking.
+     */
+    var onThinkingStart: (() -> Unit)? = null
+
+    /**
+     * Streaming callback for thinking tokens. Called with each decoded thinking piece.
+     * Only fires when [thinking] is true and the model supports thinking.
+     */
+    var onThinkingToken: ((String) -> Unit)? = null
+
+    /**
+     * Called when the model exits a thinking channel (after the last thinking token).
+     * Only fires when [thinking] is true and the model supports thinking.
+     */
+    var onThinkingEnd: (() -> Unit)? = null
 }

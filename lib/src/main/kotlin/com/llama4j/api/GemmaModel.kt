@@ -163,16 +163,21 @@ internal fun tokenAccumulator(
 
   val callback = IntConsumer { token ->
     if (hasThinkingSupport && token == channelOpen) {
-      inChannel = true; return@IntConsumer
+      inChannel = true
+      config.onThinkingStart?.invoke()
+      return@IntConsumer
     }
     if (hasThinkingSupport && token == channelClose) {
-      inChannel = false; return@IntConsumer
+      inChannel = false
+      config.onThinkingEnd?.invoke()
+      return@IntConsumer
     }
     if (tokenizer.isSpecialToken(token)) return@IntConsumer
 
     val piece = tokenizer.decode(listOf(token))
     if (inChannel) {
       thinkBuf?.append(piece)
+      config.onThinkingToken?.invoke(piece)
     } else {
       textBuf.append(piece)
       config.onToken?.invoke(piece)
