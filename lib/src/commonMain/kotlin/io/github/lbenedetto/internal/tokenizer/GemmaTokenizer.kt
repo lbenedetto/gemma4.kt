@@ -1,14 +1,13 @@
 package io.github.lbenedetto.internal.tokenizer
 
-import java.nio.charset.StandardCharsets
-import java.util.*
+import io.github.lbenedetto.internal.util.*
 
 internal class GemmaTokenizer(
     private val vocabulary: Vocabulary,
     tokenType: IntArray
 ) {
     val specialTokens: Map<String, Int>
-    private val tokenType: IntArray = tokenType.clone()
+    private val tokenType: IntArray = tokenType.copyOf()
     private val byte0: Int
 
     fun isSpecialToken(tokenIndex: Int): Boolean {
@@ -35,21 +34,19 @@ internal class GemmaTokenizer(
         val tokens = mutableListOf<Int>()
 
         var i = 0
-        var cpi: Int
         while (i < text.length) {
-            cpi = text.codePointAt(i)
-
-            val singleCodepoint = Character.toString(cpi)
+            val cpi = text.codePointAt(i)
+            val singleCodepoint = cpi.codePointToString()
             val id = vocabulary.getIndex(singleCodepoint) ?: -1
 
             if (id != -1) {
                 tokens.add(id)
             } else {
-                for (b in singleCodepoint.toByteArray(StandardCharsets.UTF_8)) {
+                for (b in singleCodepoint.encodeToByteArray()) {
                     tokens.add(b.toUByte().toInt() + byte0)
                 }
             }
-            i += Character.charCount(cpi)
+            i += cpi.charCount()
         }
 
         while (true) {
@@ -88,7 +85,7 @@ internal class GemmaTokenizer(
                 if (tokenString.length == 6 && tokenString.startsWith(prefix) && tokenString.endsWith(suffix)) {
                     val code = tokenString.substring(prefix.length, tokenString.length - suffix.length)
                     val cp = code.toInt(16)
-                    tokenString = Character.toString(cp)
+                    tokenString = cp.toChar().toString()
                 }
             } else {
                 tokenString = tokenString.replace('\u2581', ' ')
@@ -106,18 +103,17 @@ internal class GemmaTokenizer(
         fun replaceControlCharacters(codePoints: IntArray): String {
             val chars = StringBuilder()
             for (cp in codePoints) {
-                if (Character.getType(cp) == Character.CONTROL.toInt() && cp != '\n'.code) {
-                    chars.append("\\u").append(HexFormat.of().toHexDigits(cp.toLong(), 4))
+                if (cp.isControlCodePoint() && cp != '\n'.code) {
+                    chars.append("\\u").append(cp.toString(16).padStart(4, '0'))
                 } else {
-                    chars.appendCodePoint(cp)
+                    chars.append(cp.codePointToString())
                 }
             }
             return chars.toString()
         }
 
-        @JvmStatic
         fun replaceControlCharacters(str: String): String {
-            return replaceControlCharacters(str.codePoints().toArray())
+            return replaceControlCharacters(str.toCodePoints())
         }
     }
 }
