@@ -1,9 +1,14 @@
 package io.github.lbenedetto.internal.sampler
 
 import io.github.lbenedetto.internal.floattensor.FloatTensor
-import java.util.random.RandomGenerator
+import io.github.lbenedetto.internal.util.Math
+import kotlin.random.Random
 
-internal class ToppSampler(maxNumberOfElements: Int, val topp: Float, val rng: RandomGenerator) : Sampler {
+internal class ToppSampler(
+  maxNumberOfElements: Int,
+  val topp: Float,
+  val rng: Random
+) : Sampler {
   val indices: IntArray = IntArray(maxNumberOfElements)
 
   override fun sampleToken(logits: FloatTensor): Int {
@@ -20,7 +25,7 @@ internal class ToppSampler(maxNumberOfElements: Int, val topp: Float, val rng: R
     }
 
     val n0 = head
-    val comparator = Comparator.comparing<Int, Float> { logits.getFloat(it.toLong()) }.reversed()
+    val comparator = compareBy<Int> { logits.getFloat(it.toLong()) }.reversed()
     for (i in n0 / 2 - 1 downTo 0) {
       siftDown(indices, i, n0, comparator)
     }
@@ -37,7 +42,7 @@ internal class ToppSampler(maxNumberOfElements: Int, val topp: Float, val rng: R
       siftDown(indices, 0, i - 1, comparator)
     }
 
-    val r = rng.nextFloat(1f) * cumulativeProb
+    val r = rng.nextFloat() * cumulativeProb
     var cdf = 0.0f
     for (i in n0 - 1 downTo lastIndex) {
       cdf += logits.getFloat(indices[i].toLong())

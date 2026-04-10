@@ -206,7 +206,7 @@ internal class GGUF private constructor(reader: ChannelReader) {
         val numberOfElements: Long = FloatTensor.numberOfElementsLong(*ti.dimensions)
         val sizeInBytes = ti.ggmlType.byteSizeFor(numberOfElements)
         val memorySegment = tensorData.asSlice(ti.offset, sizeInBytes)
-        tensorEntries[ti.name] = GGMLTensorEntry(tensorData, ti.name, ti.ggmlType, ti.dimensions, memorySegment)
+        tensorEntries[ti.name] = GGMLTensorEntry(ti.ggmlType, ti.dimensions, memorySegment)
       }
       return tensorEntries
     }

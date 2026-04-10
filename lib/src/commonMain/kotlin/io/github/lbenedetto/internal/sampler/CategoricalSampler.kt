@@ -1,12 +1,12 @@
 package io.github.lbenedetto.internal.sampler
 
 import io.github.lbenedetto.internal.floattensor.FloatTensor
-import java.util.random.RandomGenerator
+import io.github.lbenedetto.internal.util.Math
+import kotlin.random.Random
 
-@JvmRecord
-internal data class CategoricalSampler(val rng: RandomGenerator) : Sampler {
+internal data class CategoricalSampler(val rng: Random) : Sampler {
   override fun sampleToken(logits: FloatTensor): Int {
-    val random0to1 = rng.nextFloat(1f)
+    val random0to1 = rng.nextFloat()
     var cdf = 0.0f
     for (i in 0..<logits.size) {
       cdf += logits.getFloat(i)

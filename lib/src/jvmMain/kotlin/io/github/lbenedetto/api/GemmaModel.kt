@@ -9,7 +9,7 @@ import io.github.lbenedetto.internal.sampler.Sampler
 import io.github.lbenedetto.internal.sampler.ToppSampler
 import java.nio.file.Path
 import java.util.function.IntConsumer
-import java.util.random.RandomGeneratorFactory
+import kotlin.random.Random
 
 /**
  * A loaded Gemma model, ready for text generation.
@@ -115,7 +115,7 @@ class GemmaModel private constructor(private val model: Llama) {
 
     internal fun buildSampler(vocabularySize: Int, config: GenerationConfig): Sampler {
       if (config.temperature == 0.0f) return Sampler.ARGMAX
-      val rng = RandomGeneratorFactory.getDefault().create(config.seed)
+      val rng = Random(config.seed)
       val inner: Sampler = if (config.topP <= 0f || config.topP >= 1f) {
         CategoricalSampler(rng)
       } else {

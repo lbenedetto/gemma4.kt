@@ -6,6 +6,6 @@ internal fun interface Sampler {
   fun sampleToken(logits: FloatTensor): Int
 
   companion object {
-    val ARGMAX: Sampler = Sampler { obj: FloatTensor -> obj.argmax() }
+    val ARGMAX: Sampler = Sampler { it.argmax() }
   }
 }
