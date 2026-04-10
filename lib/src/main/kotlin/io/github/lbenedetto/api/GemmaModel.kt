@@ -44,52 +44,42 @@ class GemmaModel private constructor(private val model: Llama) {
    * Each call is independent — no conversation state is retained.
    * For multi-turn exchanges use [chat] instead.
    */
-  fun generate(prompt: String, configure: GenerationConfig.() -> Unit = {}): GenerationResult {
-    val config = GenerationConfig().apply(configure)
-    val state = model.createNewState()
-    val chatFormat = GemmaChatFormat(model.tokenizer)
-    val sampler = buildSampler(model.configuration.vocabularySize, config)
-
-    val promptTokens = mutableListOf<Int>()
-    if (config.thinking) {
-      promptTokens.addAll(chatFormat.encodeSystemThinkingTurn(config.systemPrompt))
-    } else if (config.systemPrompt != null) {
-      promptTokens.addAll(chatFormat.encodeMessage(Message(Role.SYSTEM, config.systemPrompt!!)))
+  fun generate(prompt: String, configure: GenerationConfig.() -> Unit = {}): GenerationResult =
+    doGenerate(configure) { config, chatFormat ->
+      val tokens = mutableListOf<Int>()
+      if (config.thinking) {
+        tokens.addAll(chatFormat.encodeSystemThinkingTurn(config.systemPrompt))
+      } else if (config.systemPrompt != null) {
+        tokens.addAll(chatFormat.encodeMessage(Message(Role.SYSTEM, config.systemPrompt!!)))
+      }
+      tokens.addAll(chatFormat.encodeMessage(Message(Role.USER, prompt)))
+      tokens.addAll(chatFormat.encodeHeader(Message(Role.MODEL, "")))
+      tokens
     }
-    promptTokens.addAll(chatFormat.encodeMessage(Message(Role.USER, prompt)))
-    promptTokens.addAll(chatFormat.encodeHeader(Message(Role.MODEL, "")))
-
-    val stopTokens = chatFormat.stopTokens
-    val (callback, buildResult) = tokenAccumulator(model, config)
-
-    val responseTokens = Llama.generateTokens(
-      model, state, 0, promptTokens, stopTokens,
-      config.maxTokens, sampler, false, false, callback
-    )
-    if (responseTokens.isNotEmpty() && stopTokens.contains(responseTokens.last())) {
-      responseTokens.removeLast()
-    }
-
-    return buildResult()
-  }
 
   /**
    * Complete a fill-in-the-middle request given a [prefix] and [suffix].
    *
    * Requires a model that was trained with FIM support (e.g. Gemma 4 code variants).
    */
-  fun fillInMiddle(prefix: String, suffix: String, configure: GenerationConfig.() -> Unit = {}): GenerationResult {
+  fun fillInMiddle(prefix: String, suffix: String, configure: GenerationConfig.() -> Unit = {}): GenerationResult =
+    doGenerate(configure) { _, chatFormat -> chatFormat.encodeFillInTheMiddle(prefix, suffix) }
+
+  private fun doGenerate(
+    configure: GenerationConfig.() -> Unit,
+    buildPromptTokens: (GenerationConfig, GemmaChatFormat) -> List<Int>,
+  ): GenerationResult {
     val config = GenerationConfig().apply(configure)
-    val state = model.createNewState()
     val chatFormat = GemmaChatFormat(model.tokenizer)
+    val state = model.createNewState()
     val sampler = buildSampler(model.configuration.vocabularySize, config)
-    val promptTokens = chatFormat.encodeFillInTheMiddle(prefix, suffix)
+    val promptTokens = buildPromptTokens(config, chatFormat).toMutableList()
     val stopTokens = chatFormat.stopTokens
     val (callback, buildResult) = tokenAccumulator(model, config)
 
     val responseTokens = Llama.generateTokens(
       model, state, 0, promptTokens, stopTokens,
-      config.maxTokens, sampler, false, false, callback
+      config.maxTokens, sampler, echo = false, color = false, callback
     )
     if (responseTokens.isNotEmpty() && stopTokens.contains(responseTokens.last())) {
       responseTokens.removeLast()
