@@ -4,11 +4,11 @@ import io.github.lbenedetto.internal.floattensor.FloatTensor.Companion.scalarDot
 import io.github.lbenedetto.internal.floattensor.FloatTensor.Companion.toUnsignedInt
 import io.github.lbenedetto.internal.gguf.GGMLType
 import io.github.lbenedetto.internal.gguf.QK_K
+import io.github.lbenedetto.internal.util.MemorySegment
 import jdk.incubator.vector.ByteVector
 import jdk.incubator.vector.FloatVector
 import jdk.incubator.vector.VectorOperators
 import jdk.incubator.vector.VectorSpecies
-import java.lang.foreign.MemorySegment
 import java.nio.ByteOrder
 import kotlin.math.min
 
@@ -37,7 +37,7 @@ internal class Q6_KFloatTensor(
     val blockOffset: Long = blockIndex * TYPE_SIZE
     val qhOff = blockOffset + 128
     val scOff = blockOffset + 192
-    val d: Float = readFloat16(memorySegment, blockOffset + 208)
+    val d: Float = memorySegment.readFloat16(blockOffset + 208)
 
     val half = withinBlock / 128
     val rem128 = withinBlock % 128
@@ -51,31 +51,31 @@ internal class Q6_KFloatTensor(
     val qhShift: Int
     when (sub32) {
       0 -> {
-        qlNibble = readByte(memorySegment, qlBase + l).toUnsignedInt() and 0xF
+        qlNibble = memorySegment.readByte(qlBase + l).toUnsignedInt() and 0xF
         qhShift = 0
       }
 
       1 -> {
-        qlNibble = readByte(memorySegment, qlBase + 32 + l).toUnsignedInt() and 0xF
+        qlNibble = memorySegment.readByte(qlBase + 32 + l).toUnsignedInt() and 0xF
         qhShift = 2
       }
 
       2 -> {
-        qlNibble = (readByte(memorySegment, qlBase + l).toUnsignedInt() shr 4) and 0xF
+        qlNibble = (memorySegment.readByte(qlBase + l).toUnsignedInt() shr 4) and 0xF
         qhShift = 4
       }
 
       3 -> {
-        qlNibble = (readByte(memorySegment, qlBase + 32 + l).toUnsignedInt() shr 4) and 0xF
+        qlNibble = (memorySegment.readByte(qlBase + 32 + l).toUnsignedInt() shr 4) and 0xF
         qhShift = 6
       }
 
       else -> throw IllegalStateException()
     }
 
-    val qhBits = (readByte(memorySegment, qhBase + l).toUnsignedInt() shr qhShift) and 3
+    val qhBits = (memorySegment.readByte(qhBase + l).toUnsignedInt() shr qhShift) and 3
     val q6 = (qlNibble or (qhBits shl 4)) - 32
-    val sc = readByte(memorySegment, scOff + half * 8 + sub32 * 2 + l / 16).toInt() // signed int8
+    val sc = memorySegment.readByte(scOff + half * 8 + sub32 * 2 + l / 16).toInt() // signed int8
 
     return d * sc * q6
   }
@@ -147,7 +147,7 @@ internal class Q6_KFloatTensor(
         // vectorDot, causing a compile-time crash. Keep this software conversion
         // until the Graal backend bug is fixed.
         val d: Float =
-          fp16ToFloatNoIntrinsic(readShort(thiz.memorySegment, blockOffset + 208))
+          fp16ToFloatNoIntrinsic(thiz.memorySegment.readShort(blockOffset + 208))
 
         for (h in 0..1) {
           val qlBase = qlOff + h * 64
@@ -156,15 +156,15 @@ internal class Q6_KFloatTensor(
           val base = thatOffset + j + h * 128
           for (c in 0..1) {
             val qlA = ByteVector.fromMemorySegment(
-              ByteVector.SPECIES_128, thiz.memorySegment,
+              ByteVector.SPECIES_128, thiz.memorySegment.actual(),
               qlBase + c * 16L, ByteOrder.LITTLE_ENDIAN
             )
             val qlB = ByteVector.fromMemorySegment(
-              ByteVector.SPECIES_128, thiz.memorySegment,
+              ByteVector.SPECIES_128, thiz.memorySegment.actual(),
               qlBase + 32 + c * 16L, ByteOrder.LITTLE_ENDIAN
             )
             val qhV = ByteVector.fromMemorySegment(
-              ByteVector.SPECIES_128, thiz.memorySegment,
+              ByteVector.SPECIES_128, thiz.memorySegment.actual(),
               qhBase + c * 16L, ByteOrder.LITTLE_ENDIAN
             )
 
@@ -185,10 +185,10 @@ internal class Q6_KFloatTensor(
               .or(qhV.lanewise(VectorOperators.LSHR, 6L).and(3.toByte()).lanewise(VectorOperators.LSHL, 4L))
               .sub(32.toByte())
 
-            val ds0: Float = d * readByte(thiz.memorySegment, scOff + h * 8 + c)
-            val ds1: Float = d * readByte(thiz.memorySegment, scOff + h * 8 + 2 + c)
-            val ds2: Float = d * readByte(thiz.memorySegment, scOff + h * 8 + 4 + c)
-            val ds3: Float = d * readByte(thiz.memorySegment, scOff + h * 8 + 6 + c)
+            val ds0: Float = d * thiz.memorySegment.readByte(scOff + h * 8 + c)
+            val ds1: Float = d * thiz.memorySegment.readByte(scOff + h * 8 + 2 + c)
+            val ds2: Float = d * thiz.memorySegment.readByte(scOff + h * 8 + 4 + c)
+            val ds3: Float = d * thiz.memorySegment.readByte(scOff + h * 8 + 6 + c)
 
             val ds0Vec = FloatVector.broadcast(F_SPECIES, ds0)
             val ds1Vec = FloatVector.broadcast(F_SPECIES, ds1)

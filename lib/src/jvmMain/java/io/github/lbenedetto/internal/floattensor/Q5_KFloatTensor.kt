@@ -4,11 +4,11 @@ import io.github.lbenedetto.internal.floattensor.FloatTensor.Companion.scalarDot
 import io.github.lbenedetto.internal.floattensor.FloatTensor.Companion.toUnsignedInt
 import io.github.lbenedetto.internal.gguf.GGMLType
 import io.github.lbenedetto.internal.gguf.QK_K
+import io.github.lbenedetto.internal.util.MemorySegment
 import jdk.incubator.vector.ByteVector
 import jdk.incubator.vector.FloatVector
 import jdk.incubator.vector.VectorOperators
 import jdk.incubator.vector.VectorSpecies
-import java.lang.foreign.MemorySegment
 import java.nio.ByteOrder
 import kotlin.math.min
 
@@ -33,8 +33,8 @@ internal class Q5_KFloatTensor(
     val blockIndex: Long = index / BLOCK_SIZE
     val withinBlock = (index % BLOCK_SIZE).toInt()
     val blockOffset: Long = blockIndex * TYPE_SIZE
-    val d: Float = readFloat16(memorySegment, blockOffset)
-    val dmin: Float = readFloat16(memorySegment, blockOffset + 2)
+    val d: Float = memorySegment.readFloat16(blockOffset)
+    val dmin: Float = memorySegment.readFloat16(blockOffset + 2)
     val scalesOffset = blockOffset + 4
     val qhOffset = blockOffset + 16 // 4 + 12
     val qsOffset = blockOffset + 48 // 4 + 12 + 32
@@ -48,11 +48,11 @@ internal class Q5_KFloatTensor(
     val sc: Int = Q4_KFloatTensor.getScaleMinK4(subBlock, memorySegment, scalesOffset, false)
     val m: Int = Q4_KFloatTensor.getScaleMinK4(subBlock, memorySegment, scalesOffset, true)
 
-    val qsByte: Byte = readByte(memorySegment, qsOffset + group * 32 + l)
+    val qsByte: Byte = memorySegment.readByte(qsOffset + group * 32 + l)
     val nibble = if (isHigh) ((qsByte.toUnsignedInt() shr 4) and 0xF) else (qsByte.toUnsignedInt() and 0xF)
 
     val qhBitPos = if (isHigh) 2 * group + 1 else 2 * group
-    val qhBit = (readByte(memorySegment, qhOffset + l).toUnsignedInt() shr qhBitPos) and 1
+    val qhBit = (memorySegment.readByte(qhOffset + l).toUnsignedInt() shr qhBitPos) and 1
 
     val quant = nibble or (qhBit shl 4)
     return d * sc * quant - dmin * m
@@ -93,15 +93,15 @@ internal class Q5_KFloatTensor(
       val upperBound: Int = j + (size - j) / BLOCK_SIZE * BLOCK_SIZE
 
       while (j < upperBound) {
-        val d: Float = readFloat16(thiz.memorySegment, blockOffset)
-        val dmin: Float = readFloat16(thiz.memorySegment, blockOffset + 2)
+        val d: Float = thiz.memorySegment.readFloat16(blockOffset)
+        val dmin: Float = thiz.memorySegment.readFloat16(blockOffset + 2)
         val scalesOff = blockOffset + 4
         val qhOff = blockOffset + 16
         val qsOff = blockOffset + 48
         val qh0 =
-          ByteVector.fromMemorySegment(ByteVector.SPECIES_128, thiz.memorySegment, qhOff, ByteOrder.LITTLE_ENDIAN)
+          ByteVector.fromMemorySegment(ByteVector.SPECIES_128, thiz.memorySegment.actual(), qhOff, ByteOrder.LITTLE_ENDIAN)
         val qh1 =
-          ByteVector.fromMemorySegment(ByteVector.SPECIES_128, thiz.memorySegment, qhOff + 16, ByteOrder.LITTLE_ENDIAN)
+          ByteVector.fromMemorySegment(ByteVector.SPECIES_128, thiz.memorySegment.actual(), qhOff + 16, ByteOrder.LITTLE_ENDIAN)
 
         for (g in 0..3) {
           val loSubBlock = g * 2
@@ -125,7 +125,7 @@ internal class Q5_KFloatTensor(
             val hiBase = thatOffset + j + g * 64 + 32 + c * 16
 
             val wBytes = ByteVector.fromMemorySegment(
-              ByteVector.SPECIES_128, thiz.memorySegment,
+              ByteVector.SPECIES_128, thiz.memorySegment.actual(),
               groupQsOff + c * 16L, ByteOrder.LITTLE_ENDIAN
             )
             var loQ = wBytes.and(0xF.toByte())

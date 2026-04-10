@@ -4,11 +4,11 @@ import io.github.lbenedetto.internal.floattensor.FloatTensor.Companion.scalarDot
 import io.github.lbenedetto.internal.floattensor.FloatTensor.Companion.toUnsignedInt
 import io.github.lbenedetto.internal.gguf.GGMLType
 import io.github.lbenedetto.internal.gguf.QK_MXFP4
+import io.github.lbenedetto.internal.util.MemorySegment
 import jdk.incubator.vector.ByteVector
 import jdk.incubator.vector.FloatVector
 import jdk.incubator.vector.VectorOperators
 import jdk.incubator.vector.VectorSpecies
-import java.lang.foreign.MemorySegment
 import java.nio.ByteOrder
 import kotlin.math.min
 
@@ -35,11 +35,11 @@ internal class MXFP4FloatTensor(
     val inBlockIndex = (index % QK_MXFP4).toInt()
     val blockOffset = blockIndex * GGMLType.MXFP4.typeSize
 
-    val e8m0 = readByte(memorySegment, blockOffset).toUnsignedInt()
+    val e8m0 = memorySegment.readByte(blockOffset).toUnsignedInt()
     val d: Float = e8m0ToFp32Half(e8m0)
 
     val qsOffset = blockOffset + Byte.SIZE_BYTES + (inBlockIndex and 0x0F)
-    val packed = readByte(memorySegment, qsOffset).toUnsignedInt()
+    val packed = memorySegment.readByte(qsOffset).toUnsignedInt()
     val nibble = if (inBlockIndex < (QK_MXFP4 / 2)) (packed and 0x0F) else ((packed ushr 4) and 0x0F)
 
     return MXFP4_VALUES[nibble] * d
@@ -79,11 +79,11 @@ internal class MXFP4FloatTensor(
       while (j < upperBound) {
         assert((thisOffset + j) % QK_MXFP4 == 0)
         val blockOffset: Long = (thisOffset + j).toLong() / QK_MXFP4 * GGMLType.MXFP4.typeSize
-        val d: Float = e8m0ToFp32Half(readByte(thiz.memorySegment, blockOffset).toUnsignedInt())
+        val d: Float = e8m0ToFp32Half(thiz.memorySegment.readByte(blockOffset).toUnsignedInt())
 
         val packed = ByteVector.fromMemorySegment(
           ByteVector.SPECIES_128,
-          thiz.memorySegment,
+          thiz.memorySegment.actual(),
           blockOffset + Byte.SIZE_BYTES,
           ByteOrder.LITTLE_ENDIAN
         )

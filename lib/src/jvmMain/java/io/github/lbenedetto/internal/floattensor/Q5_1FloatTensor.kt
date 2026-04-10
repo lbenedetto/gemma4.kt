@@ -3,10 +3,10 @@ package io.github.lbenedetto.internal.floattensor
 import io.github.lbenedetto.internal.floattensor.FloatTensor.Companion.scalarDot
 import io.github.lbenedetto.internal.floattensor.FloatTensor.Companion.toUnsignedInt
 import io.github.lbenedetto.internal.gguf.GGMLType
+import io.github.lbenedetto.internal.util.MemorySegment
 import jdk.incubator.vector.FloatVector
 import jdk.incubator.vector.VectorOperators
 import jdk.incubator.vector.VectorSpecies
-import java.lang.foreign.MemorySegment
 import kotlin.math.min
 
 internal class Q5_1FloatTensor(
@@ -32,8 +32,8 @@ internal class Q5_1FloatTensor(
     val inBlockIndex = (index % GGMLType.Q5_1.blockSize).toInt()
     val blockOffset = blockIndex * GGMLType.Q5_1.typeSize
 
-    val d: Float = readFloat16(memorySegment, blockOffset)
-    val m: Float = readFloat16(memorySegment, blockOffset + Float16.BYTES)
+    val d: Float = memorySegment.readFloat16(blockOffset)
+    val m: Float = memorySegment.readFloat16(blockOffset + Float16.BYTES)
     val qh: Int = readInt32LE(memorySegment, blockOffset + 2L * Float16.BYTES)
 
     val j: Int
@@ -41,15 +41,13 @@ internal class Q5_1FloatTensor(
     val xh: Int
     if (inBlockIndex < GGMLType.Q5_1.blockSize / 2) {
       j = inBlockIndex
-      nibble = readByte(
-        memorySegment,
+      nibble = memorySegment.readByte(
         blockOffset + 2L * Float16.BYTES + Integer.BYTES + j
       ).toUnsignedInt() and 0x0F
       xh = ((qh shr j) shl 4) and 0x10
     } else {
       j = inBlockIndex - GGMLType.Q5_1.blockSize / 2
-      nibble = (readByte(
-        memorySegment,
+      nibble = (memorySegment.readByte(
         blockOffset + 2L * Float16.BYTES + Integer.BYTES + j
       ).toUnsignedInt() ushr 4) and 0x0F
       xh = (qh shr (j + 12)) and 0x10
@@ -94,13 +92,13 @@ internal class Q5_1FloatTensor(
       while (j < upperBound) {
         assert((thisOffset + j) % GGMLType.Q5_1.blockSize == 0)
         val blockOffset = (thisOffset + j).toLong() / GGMLType.Q5_1.blockSize * GGMLType.Q5_1.typeSize
-        val d: Float = readFloat16(thiz.memorySegment, blockOffset)
-        val m: Float = readFloat16(thiz.memorySegment, blockOffset + Float16.BYTES)
+        val d: Float = thiz.memorySegment.readFloat16(blockOffset)
+        val m: Float = thiz.memorySegment.readFloat16(blockOffset + Float16.BYTES)
         val qh: Int = readInt32LE(thiz.memorySegment, blockOffset + 2L * Float16.BYTES)
         val qsBase = blockOffset + 2L * Float16.BYTES + Integer.BYTES
 
         for (p in 0..<GGMLType.Q5_1.blockSize / 2) {
-          val packed = readByte(thiz.memorySegment, qsBase + p).toUnsignedInt()
+          val packed = thiz.memorySegment.readByte(qsBase + p).toUnsignedInt()
           val x0 = (packed and 0x0F) or ((((qh shr p) shl 4) and 0x10))
           val x1 = ((packed ushr 4) and 0x0F) or ((qh shr (p + 12)) and 0x10)
           decoded[p] = x0 * d + m
@@ -146,10 +144,10 @@ internal class Q5_1FloatTensor(
     }
 
     private fun readInt32LE(memorySegment: MemorySegment, offset: Long): Int {
-      val b0 = readByte(memorySegment, offset).toUnsignedInt()
-      val b1 = readByte(memorySegment, offset + 1).toUnsignedInt()
-      val b2 = readByte(memorySegment, offset + 2).toUnsignedInt()
-      val b3 = readByte(memorySegment, offset + 3).toUnsignedInt()
+      val b0 = memorySegment.readByte(offset).toUnsignedInt()
+      val b1 = memorySegment.readByte(offset + 1).toUnsignedInt()
+      val b2 = memorySegment.readByte(offset + 2).toUnsignedInt()
+      val b3 = memorySegment.readByte(offset + 3).toUnsignedInt()
       return b0 or (b1 shl 8) or (b2 shl 16) or (b3 shl 24)
     }
   }

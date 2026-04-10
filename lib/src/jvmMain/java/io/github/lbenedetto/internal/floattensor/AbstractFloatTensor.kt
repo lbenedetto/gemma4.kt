@@ -4,8 +4,6 @@ import io.github.lbenedetto.internal.gguf.GGMLType
 import jdk.incubator.vector.FloatVector
 import jdk.incubator.vector.VectorShape
 import jdk.incubator.vector.VectorSpecies
-import java.lang.foreign.MemorySegment
-import java.lang.foreign.ValueLayout
 
 internal abstract class AbstractFloatTensor : FloatTensor {
   abstract fun getFloatVector(species: VectorSpecies<Float>, offset: Int): FloatVector?
@@ -33,22 +31,6 @@ internal abstract class AbstractFloatTensor : FloatTensor {
         I_SPECIES = null
         S_SPECIES_HALF = null
       }
-    }
-
-    fun readShort(memorySegment: MemorySegment, offset: Long): Short {
-      return memorySegment.get(ValueLayout.JAVA_SHORT_UNALIGNED, offset)
-    }
-
-    fun readFloat16(memorySegment: MemorySegment, offset: Long): Float {
-      return java.lang.Float.float16ToFloat(readShort(memorySegment, offset))
-    }
-
-    fun readByte(memorySegment: MemorySegment, offset: Long): Byte {
-      return memorySegment.get(ValueLayout.JAVA_BYTE, offset)
-    }
-
-    fun readFloat(memorySegment: MemorySegment, offset: Long): Float {
-      return memorySegment.get(ValueLayout.JAVA_FLOAT_UNALIGNED, offset)
     }
   }
 }

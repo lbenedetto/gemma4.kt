@@ -2,11 +2,11 @@ package io.github.lbenedetto.internal.floattensor
 
 import io.github.lbenedetto.internal.floattensor.FloatTensor.Companion.scalarDot
 import io.github.lbenedetto.internal.gguf.GGMLType
+import io.github.lbenedetto.internal.util.MemorySegment
 import jdk.incubator.vector.ByteVector
 import jdk.incubator.vector.FloatVector
 import jdk.incubator.vector.VectorOperators
 import jdk.incubator.vector.VectorSpecies
-import java.lang.foreign.MemorySegment
 import java.nio.ByteOrder
 import kotlin.math.min
 
@@ -31,8 +31,8 @@ internal class Q8_0FloatTensor(
     val blockIndex = index / GGMLType.Q8_0.blockSize
     val withinBlockIndex = index % GGMLType.Q8_0.blockSize
     val blockOffset = blockIndex * GGMLType.Q8_0.typeSize
-    val quant: Byte = readByte(memorySegment, blockOffset + Float16.BYTES + withinBlockIndex)
-    val scale: Float = readFloat16(memorySegment, blockOffset)
+    val quant: Byte = memorySegment.readByte(blockOffset + Float16.BYTES + withinBlockIndex)
+    val scale: Float = memorySegment.readFloat16(blockOffset)
     return quant * scale
   }
 
@@ -67,13 +67,13 @@ internal class Q8_0FloatTensor(
       var blockOffset = (thisOffset + j).toLong() / GGMLType.Q8_0.blockSize * GGMLType.Q8_0.typeSize
       val upperBound = j + (size - j) / GGMLType.Q8_0.blockSize * GGMLType.Q8_0.blockSize
       while (j < upperBound) {
-        val wScaleValue: Float = readFloat16(thiz.memorySegment, blockOffset)
+        val wScaleValue: Float = thiz.memorySegment.readFloat16(blockOffset)
         val wScale = FloatVector.broadcast(F_SPECIES, wScaleValue)
         when (F_SPECIES.vectorBitSize()) {
           512 -> {
             val wBytes = ByteVector.fromMemorySegment(
               ByteVector.SPECIES_256,
-              thiz.memorySegment,
+              thiz.memorySegment.actual(),
               blockOffset + Float16.BYTES,
               ByteOrder.LITTLE_ENDIAN
             )
@@ -89,7 +89,7 @@ internal class Q8_0FloatTensor(
           256 -> {
             val wBytes = ByteVector.fromMemorySegment(
               ByteVector.SPECIES_256,
-              thiz.memorySegment,
+              thiz.memorySegment.actual(),
               blockOffset + Float16.BYTES,
               ByteOrder.LITTLE_ENDIAN
             )
@@ -114,7 +114,7 @@ internal class Q8_0FloatTensor(
             for (i in 0..1) {
               val wBytes = ByteVector.fromMemorySegment(
                 ByteVector.SPECIES_128,
-                thiz.memorySegment,
+                thiz.memorySegment.actual(),
                 blockOffset + Float16.BYTES + i * ByteVector.SPECIES_128.vectorByteSize(),
                 ByteOrder.LITTLE_ENDIAN
               )

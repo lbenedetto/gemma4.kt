@@ -3,11 +3,11 @@ package io.github.lbenedetto.internal.floattensor
 import io.github.lbenedetto.internal.floattensor.FloatTensor.Companion.scalarDot
 import io.github.lbenedetto.internal.floattensor.FloatTensor.Companion.toUnsignedInt
 import io.github.lbenedetto.internal.gguf.GGMLType
+import io.github.lbenedetto.internal.util.MemorySegment
 import jdk.incubator.vector.ByteVector
 import jdk.incubator.vector.FloatVector
 import jdk.incubator.vector.VectorOperators
 import jdk.incubator.vector.VectorSpecies
-import java.lang.foreign.MemorySegment
 import java.nio.ByteOrder
 import kotlin.math.min
 
@@ -32,19 +32,15 @@ internal class Q4_1FloatTensor(
     assert(index in 0..<size)
     val blockIndex = index / GGMLType.Q4_1.blockSize
     val blockOffset = blockIndex * GGMLType.Q4_1.typeSize
-    val delta: Float = readFloat16(memorySegment, blockOffset)
-    val min: Float = readFloat16(memorySegment, blockOffset + Float16.BYTES)
+    val delta: Float = memorySegment.readFloat16(blockOffset)
+    val min: Float = memorySegment.readFloat16(blockOffset + Float16.BYTES)
     val modIndex = (index % GGMLType.Q4_1.blockSize).toInt()
     val quant: Int = if (modIndex < 16) {
-      readByte(
-        memorySegment,
-        blockOffset + 2 * Float16.BYTES + modIndex
-      ).toUnsignedInt() and 0x0F
+      val offset = blockOffset + 2 * Float16.BYTES + modIndex
+      memorySegment.readByte(offset).toUnsignedInt() and 0x0F
     } else {
-      (readByte(
-        memorySegment,
-        blockOffset + 2 * Float16.BYTES + modIndex - 16
-      ).toUnsignedInt() ushr 4) and 0x0F
+      val offset = blockOffset + 2 * Float16.BYTES + modIndex - 16
+      (memorySegment.readByte(offset).toUnsignedInt() ushr 4) and 0x0F
     }
     return delta * quant + min
   }
@@ -80,13 +76,13 @@ internal class Q4_1FloatTensor(
       var blockOffset = (thisOffset + j).toLong() / GGMLType.Q4_1.blockSize * GGMLType.Q4_1.typeSize
       val upperBound = j + (size - j) / GGMLType.Q4_1.blockSize * GGMLType.Q4_1.blockSize
       while (j < upperBound) {
-        val deltaValue: Float = readFloat16(thiz.memorySegment, blockOffset)
-        val minValue: Float = readFloat16(thiz.memorySegment, blockOffset + Float16.BYTES)
+        val deltaValue: Float = thiz.memorySegment.readFloat16(blockOffset)
+        val minValue: Float = thiz.memorySegment.readFloat16(blockOffset + Float16.BYTES)
         val wDelta = FloatVector.broadcast(F_SPECIES, deltaValue)
         val wMin = FloatVector.broadcast(F_SPECIES, minValue)
         val wBytes = ByteVector.fromMemorySegment(
           ByteVector.SPECIES_128,
-          thiz.memorySegment,
+          thiz.memorySegment.actual(),
           blockOffset + 2 * Float16.BYTES,
           ByteOrder.LITTLE_ENDIAN
         )

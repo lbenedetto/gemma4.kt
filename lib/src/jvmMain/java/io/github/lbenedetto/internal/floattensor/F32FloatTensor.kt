@@ -2,11 +2,10 @@ package io.github.lbenedetto.internal.floattensor
 
 import io.github.lbenedetto.internal.floattensor.FloatTensor.Companion.scalarDot
 import io.github.lbenedetto.internal.gguf.GGMLType
+import io.github.lbenedetto.internal.util.MemorySegment
 import jdk.incubator.vector.FloatVector
 import jdk.incubator.vector.VectorOperators
 import jdk.incubator.vector.VectorSpecies
-import java.lang.foreign.MemorySegment
-import java.lang.foreign.ValueLayout
 import java.nio.ByteOrder
 
 internal class F32FloatTensor(
@@ -15,7 +14,7 @@ internal class F32FloatTensor(
 ) : AbstractFloatTensor() {
 
   override fun getFloat(index: Long): Float {
-    return memorySegment.get(ValueLayout.JAVA_FLOAT_UNALIGNED, index * Float.SIZE_BYTES)
+    return memorySegment.readFloat(index * Float.SIZE_BYTES)
   }
 
   override fun setFloat(index: Int, value: Float) {
@@ -30,7 +29,12 @@ internal class F32FloatTensor(
     if (!USE_VECTOR_API) {
       throw UnsupportedOperationException()
     }
-    return FloatVector.fromMemorySegment(species, memorySegment, offset.toLong() * Float.SIZE_BYTES, ByteOrder.LITTLE_ENDIAN)
+    return FloatVector.fromMemorySegment(
+      species,
+      memorySegment.actual(),
+      offset.toLong() * Float.SIZE_BYTES,
+      ByteOrder.LITTLE_ENDIAN
+    )
   }
 
   override fun dot(thisOffset: Int, that: FloatTensor, thatOffset: Int, size: Int): Float {
@@ -55,7 +59,7 @@ internal class F32FloatTensor(
         while (i < upperBound) {
           val a = FloatVector.fromMemorySegment(
             F_SPECIES,
-            thiz.memorySegment,
+            thiz.memorySegment.actual(),
             (thisOffset + i).toLong() * Float.SIZE_BYTES,
             ByteOrder.LITTLE_ENDIAN
           )

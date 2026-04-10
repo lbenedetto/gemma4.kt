@@ -2,11 +2,11 @@ package io.github.lbenedetto.internal.floattensor
 
 import io.github.lbenedetto.internal.floattensor.FloatTensor.Companion.scalarDot
 import io.github.lbenedetto.internal.gguf.GGMLType
+import io.github.lbenedetto.internal.util.MemorySegment
 import jdk.incubator.vector.FloatVector
 import jdk.incubator.vector.ShortVector
 import jdk.incubator.vector.VectorOperators
 import jdk.incubator.vector.VectorSpecies
-import java.lang.foreign.MemorySegment
 import java.nio.ByteOrder
 
 internal class F16FloatTensor(
@@ -28,7 +28,7 @@ internal class F16FloatTensor(
 
   override fun getFloat(index: Long): Float {
     assert(index in 0..<size)
-    return readFloat16(memorySegment, index * 2)
+    return memorySegment.readFloat16(index * 2)
   }
 
   override fun dot(thisOffset: Int, that: FloatTensor, thatOffset: Int, size: Int): Float {
@@ -58,7 +58,7 @@ internal class F16FloatTensor(
         val thatVector = that.getFloatVector(F_SPECIES, thatOffset + i)
         val bits16 = ShortVector.fromMemorySegment(
           S_SPECIES_HALF,
-          thiz.memorySegment,
+          thiz.memorySegment.actual(),
           (thisOffset + i) * 2L,
           ByteOrder.LITTLE_ENDIAN
         )

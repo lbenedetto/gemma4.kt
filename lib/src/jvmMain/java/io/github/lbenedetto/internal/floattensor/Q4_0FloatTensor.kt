@@ -2,11 +2,11 @@ package io.github.lbenedetto.internal.floattensor
 
 import io.github.lbenedetto.internal.floattensor.FloatTensor.Companion.scalarDot
 import io.github.lbenedetto.internal.gguf.GGMLType
+import io.github.lbenedetto.internal.util.MemorySegment
 import jdk.incubator.vector.ByteVector
 import jdk.incubator.vector.FloatVector
 import jdk.incubator.vector.VectorOperators
 import jdk.incubator.vector.VectorSpecies
-import java.lang.foreign.MemorySegment
 import java.nio.ByteOrder
 import kotlin.math.min
 
@@ -31,17 +31,15 @@ internal class Q4_0FloatTensor(
     assert(index in 0..<size)
     val blockIndex = index / GGMLType.Q4_0.blockSize
     val blockOffset = blockIndex * GGMLType.Q4_0.typeSize
-    val scale: Float = readFloat16(memorySegment, blockOffset)
+    val scale: Float = memorySegment.readFloat16(blockOffset)
     var quant: Byte
     val modIndex = (index % GGMLType.Q4_0.blockSize).toInt()
     quant = if (modIndex < GGMLType.Q4_0.blockSize / 2) {
-      (readByte(memorySegment, blockOffset + Float16.BYTES + modIndex)
-        .toInt() and 0x0F).toByte()
+      val offset = blockOffset + Float16.BYTES + modIndex
+      (memorySegment.readByte(offset).toInt() and 0x0F).toByte()
     } else {
-      ((readByte(
-        memorySegment,
-        blockOffset + Float16.BYTES + modIndex - GGMLType.Q4_0.blockSize / 2
-      ).toInt() ushr 4) and 0x0F).toByte()
+      val offset = blockOffset + Float16.BYTES + modIndex - GGMLType.Q4_0.blockSize / 2
+      ((memorySegment.readByte(offset).toInt() ushr 4) and 0x0F).toByte()
     }
     quant = (quant - 8).toByte()
     return quant * scale
@@ -78,11 +76,11 @@ internal class Q4_0FloatTensor(
       var blockOffset = (thisOffset + j).toLong() / GGMLType.Q4_0.blockSize * GGMLType.Q4_0.typeSize
       val upperBound = j + (size - j) / GGMLType.Q4_0.blockSize * GGMLType.Q4_0.blockSize
       while (j < upperBound) {
-        val wScaleValue: Float = readFloat16(thiz.memorySegment, blockOffset)
+        val wScaleValue: Float = thiz.memorySegment.readFloat16(blockOffset)
         val wScale = FloatVector.broadcast(F_SPECIES, wScaleValue)
         val wBytes = ByteVector.fromMemorySegment(
           ByteVector.SPECIES_128,
-          thiz.memorySegment,
+          thiz.memorySegment.actual(),
           blockOffset + Float16.BYTES,
           ByteOrder.LITTLE_ENDIAN
         )
