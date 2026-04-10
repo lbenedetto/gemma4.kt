@@ -12,7 +12,7 @@ dependencies {
 }
 
 application {
-    mainClass = "com.llama4j.Gemma4"
+    mainClass = "io.github.lbenedetto.Gemma4"
 }
 
 java {
@@ -31,7 +31,7 @@ tasks.register<Jar>("fatJar") {
     archiveFileName.set("gemma4.jar")
 
     manifest {
-        attributes["Main-Class"] = "com.llama4j.Gemma4"
+        attributes["Main-Class"] = "io.github.lbenedetto.Gemma4"
     }
 
     from(sourceSets.main.get().output)
