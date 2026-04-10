@@ -1,4 +1,5 @@
 [versions]
+kotlin = "2.3.20"
 kotest = "6.1.11"
 
 [libraries]
@@ -6,4 +7,5 @@ kotest-runner-junit5   = { module = "io.kotest:kotest-runner-junit5",   version.
 kotest-assertions-core = { module = "io.kotest:kotest-assertions-core", version.ref = "kotest" }
 
 [plugins]
-kotlin-jvm  = { id = "org.jetbrains.kotlin.jvm", version = "2.3.20" }
+kotlin-jvm           = { id = "org.jetbrains.kotlin.jvm",           version.ref = "kotlin" }
+kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
