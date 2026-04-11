@@ -1,6 +1,8 @@
 package io.github.lbenedetto.internal.floattensor
 
 import io.github.lbenedetto.internal.floattensor.FloatTensor.Companion.scalarDot
+import io.github.lbenedetto.internal.floattensor.VectorSpeciesConfig.F_SPECIES
+import io.github.lbenedetto.internal.floattensor.VectorSpeciesConfig.USE_VECTOR_API
 import io.github.lbenedetto.internal.gguf.GGMLType
 import io.github.lbenedetto.internal.util.MemorySegment
 import jdk.incubator.vector.FloatVector

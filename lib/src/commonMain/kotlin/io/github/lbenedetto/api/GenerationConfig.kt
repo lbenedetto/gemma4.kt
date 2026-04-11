@@ -1,5 +1,7 @@
 package io.github.lbenedetto.api
 
+import kotlin.time.TimeSource
+
 /**
  * Configuration for a generation request.
  *
@@ -20,7 +22,7 @@ class GenerationConfig {
     var topP: Float = 0.95f
 
     /** Random seed for reproducibility. Default: random. */
-    var seed: Long = System.nanoTime()
+    var seed: Long = TimeSource.Monotonic.markNow().elapsedNow().inWholeNanoseconds
 
     /** Maximum tokens to generate. Negative = capped by context length. Default: 1024 */
     var maxTokens: Int = Config.DEFAULT_MAX_TOKENS
