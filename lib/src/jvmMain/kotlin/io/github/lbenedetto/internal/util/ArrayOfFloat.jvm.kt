@@ -14,4 +14,9 @@ actual class FloatBuffer(
   }
 
   actual fun get(index: Int) : Float = floatBuffer.get(index)
+
+  actual fun rewind() : FloatBuffer {
+    floatBuffer.rewind()
+    return this
+  }
 }

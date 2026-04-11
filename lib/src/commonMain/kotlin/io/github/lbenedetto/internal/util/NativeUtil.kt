@@ -11,3 +11,5 @@ internal fun assert(value: Boolean) {
  * and runtime assertions have been enabled on the JVM using the *-ea* JVM option.
  */
 internal expect inline fun assert(condition: Boolean, lazyMessage: () -> Any)
+
+expect fun vectorMathEnabled(): Boolean

@@ -1,17 +1,11 @@
 package io.github.lbenedetto.internal.floattensor
 
 import io.github.lbenedetto.internal.floattensor.FloatTensor.Companion.scalarDot
-import io.github.lbenedetto.internal.floattensor.VectorSpeciesConfig.F_SPECIES
-import io.github.lbenedetto.internal.floattensor.VectorSpeciesConfig.I_SPECIES
-import io.github.lbenedetto.internal.floattensor.VectorSpeciesConfig.S_SPECIES_HALF
-import io.github.lbenedetto.internal.floattensor.VectorSpeciesConfig.USE_VECTOR_API
 import io.github.lbenedetto.internal.gguf.GGMLType
 import io.github.lbenedetto.internal.util.MemorySegment
+import io.github.lbenedetto.internal.util.vectorMathEnabled
 import jdk.incubator.vector.FloatVector
-import jdk.incubator.vector.ShortVector
-import jdk.incubator.vector.VectorOperators
 import jdk.incubator.vector.VectorSpecies
-import java.nio.ByteOrder
 
 internal class BF16FloatTensor(
   override val size: Long,
@@ -37,52 +31,10 @@ internal class BF16FloatTensor(
   }
 
   override fun dot(thisOffset: Int, that: FloatTensor, thatOffset: Int, size: Int): Float {
-    return if (USE_VECTOR_API) {
-      vectorDot(this, thisOffset, that as ArrayFloatTensor, thatOffset, size)
+    return if (vectorMathEnabled()) {
+      BF16FloatTensorMath.vectorDot(this, thisOffset, that as ArrayFloatTensor, thatOffset, size)
     } else {
       scalarDot(this, thisOffset, that, thatOffset, size)
-    }
-  }
-
-  companion object {
-    private fun vectorDot(
-      thiz: BF16FloatTensor,
-      thisOffset: Int,
-      that: ArrayFloatTensor,
-      thatOffset: Int,
-      size: Int
-    ): Float {
-      assert(S_SPECIES_HALF!!.length() == F_SPECIES!!.length())
-      var `val` =
-        FloatVector.zero(F_SPECIES)
-      val upperBound: Int = F_SPECIES.loopBound(size)
-      var i = 0
-      while (i < upperBound) {
-        val thatVector = that.getFloatVector(F_SPECIES, thatOffset + i)
-        val bfloat16 = ShortVector.fromMemorySegment(
-          S_SPECIES_HALF,
-          thiz.memorySegment.actual(),
-          (thisOffset + i) * 2L,
-          ByteOrder.LITTLE_ENDIAN
-        )
-        val thizVector = bfloat16
-          .castShape(I_SPECIES!!, 0)
-          .lanewise(VectorOperators.LSHL, 16)
-          .reinterpretAsFloats()
-        `val` = thizVector.fma(thatVector, `val`)
-        i += F_SPECIES.length()
-      }
-      var result = `val`.reduceLanes(VectorOperators.ADD)
-      if (upperBound < size) {
-        result += scalarDot(
-          thiz,
-          thisOffset + upperBound,
-          that,
-          thatOffset + upperBound,
-          size - upperBound
-        )
-      }
-      return result
     }
   }
 }

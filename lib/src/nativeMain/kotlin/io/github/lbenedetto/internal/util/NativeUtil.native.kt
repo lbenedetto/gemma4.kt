@@ -17,3 +17,6 @@ internal actual inline fun assert(condition: Boolean, lazyMessage: () -> Any) {
     printlnStderr(lazyMessage().toString())
   }
 }
+
+// TODO: Figure out if this should always be true
+actual fun vectorMathEnabled(): Boolean = true

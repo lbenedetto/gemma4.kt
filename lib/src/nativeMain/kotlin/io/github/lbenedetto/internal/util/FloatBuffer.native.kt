@@ -10,6 +10,11 @@ actual class FloatBuffer(private val array: FloatArray, private var pos: Int = 0
   }
 
   actual fun get(index: Int): Float = array[pos + index]
+
+  actual fun rewind(): FloatBuffer {
+    pos = 0
+    return this
+  }
 }
 
 actual fun wrapWithFloatBuffer(array: FloatArray): FloatBuffer = FloatBuffer(array)

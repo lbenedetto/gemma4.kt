@@ -2,13 +2,11 @@ package io.github.lbenedetto.internal.floattensor
 
 import io.github.lbenedetto.internal.floattensor.FloatTensor.Companion.numberOfElements
 import io.github.lbenedetto.internal.floattensor.FloatTensor.Companion.scalarDot
-import io.github.lbenedetto.internal.floattensor.VectorSpeciesConfig.F_SPECIES
-import io.github.lbenedetto.internal.floattensor.VectorSpeciesConfig.USE_VECTOR_API
 import io.github.lbenedetto.internal.gguf.GGMLType
+import io.github.lbenedetto.internal.util.FloatBuffer
+import io.github.lbenedetto.internal.util.vectorMathEnabled
 import jdk.incubator.vector.FloatVector
-import jdk.incubator.vector.VectorOperators
 import jdk.incubator.vector.VectorSpecies
-import java.nio.FloatBuffer
 import java.util.*
 
 internal class ArrayFloatTensor : AbstractFloatTensor {
@@ -45,7 +43,7 @@ internal class ArrayFloatTensor : AbstractFloatTensor {
   }
 
   override fun getFloatVector(species: VectorSpecies<Float>, offset: Int): FloatVector {
-    if (!USE_VECTOR_API) {
+    if (!vectorMathEnabled()) {
       throw UnsupportedOperationException()
     }
     return FloatVector.fromArray(species, values, offset)
@@ -53,8 +51,8 @@ internal class ArrayFloatTensor : AbstractFloatTensor {
 
   override fun dot(thisOffset: Int, that: FloatTensor, thatOffset: Int, size: Int): Float {
     if (that is ArrayFloatTensor) {
-      if (USE_VECTOR_API) {
-        return vectorDot(this, thisOffset, that, thatOffset, size)
+      if (vectorMathEnabled()) {
+        return ArrayFloatTensorMath.vectorDot(this, thisOffset, that, thatOffset, size)
       }
       return scalarDot(this, thisOffset, that, thatOffset, size)
     }
@@ -65,31 +63,6 @@ internal class ArrayFloatTensor : AbstractFloatTensor {
     fun allocate(vararg dims: Int): FloatTensor {
       val numberOfElements: Int = numberOfElements(*dims)
       return ArrayFloatTensor(FloatArray(numberOfElements))
-    }
-
-    private fun vectorDot(
-      thiz: ArrayFloatTensor,
-      thisOffset: Int,
-      that: ArrayFloatTensor,
-      thatOffset: Int,
-      size: Int
-    ): Float {
-      var value = FloatVector.zero(F_SPECIES!!)
-      val upperBound: Int = F_SPECIES.loopBound(size)
-      run {
-        var i = 0
-        while (i < upperBound) {
-          val a = FloatVector.fromArray(F_SPECIES, thiz.values, thisOffset + i)
-          val b = FloatVector.fromArray(F_SPECIES, that.values, thatOffset + i)
-          value = a.fma(b, value)
-          i += F_SPECIES.length()
-        }
-      }
-      var result = value.reduceLanes(VectorOperators.ADD)
-      for (i in upperBound..<size) {
-        result += thiz.values[thisOffset + i] * that.values[thatOffset + i]
-      }
-      return result
     }
   }
 }
