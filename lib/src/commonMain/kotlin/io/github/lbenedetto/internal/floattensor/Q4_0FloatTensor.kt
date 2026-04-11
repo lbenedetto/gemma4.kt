@@ -1,8 +1,8 @@
 package io.github.lbenedetto.internal.floattensor
 
+import io.github.lbenedetto.internal.data.MemorySegment
 import io.github.lbenedetto.internal.floattensor.FloatTensor.Companion.scalarDot
 import io.github.lbenedetto.internal.gguf.GGMLType
-import io.github.lbenedetto.internal.util.MemorySegment
 import io.github.lbenedetto.internal.util.assert
 import io.github.lbenedetto.internal.util.vectorMathEnabled
 

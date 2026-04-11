@@ -1,7 +1,7 @@
 package io.github.lbenedetto.internal.gguf
 
-import io.github.lbenedetto.internal.util.FloatBuffer
-import io.github.lbenedetto.internal.util.MemorySegment
+import io.github.lbenedetto.internal.data.FloatBuffer
+import io.github.lbenedetto.internal.data.MemorySegment
 
 internal data class GGMLTensorEntry(
   val ggmlType: GGMLType,

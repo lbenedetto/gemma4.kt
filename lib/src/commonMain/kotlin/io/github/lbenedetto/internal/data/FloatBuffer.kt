@@ -1,4 +1,4 @@
-package io.github.lbenedetto.internal.util
+package io.github.lbenedetto.internal.data
 
 expect fun wrapWithFloatBuffer(array: FloatArray): FloatBuffer
 

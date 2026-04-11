@@ -9,6 +9,11 @@ internal actual fun printlnStderr(message: String) {
   fputs("$message\n", stderr)
 }
 
+@OptIn(ExperimentalForeignApi::class)
+internal actual fun printStderr(message: String) {
+  fputs(message, stderr)
+}
+
 /**
  * Never throws exception since we have no mechananism of enabling assertions on native platform
  */

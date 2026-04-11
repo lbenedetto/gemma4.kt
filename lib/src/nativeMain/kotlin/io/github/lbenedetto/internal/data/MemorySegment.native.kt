@@ -1,4 +1,4 @@
-package io.github.lbenedetto.internal.util
+package io.github.lbenedetto.internal.data
 
 import kotlinx.cinterop.*
 import okio.Path

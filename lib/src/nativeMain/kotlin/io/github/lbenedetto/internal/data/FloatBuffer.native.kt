@@ -1,4 +1,4 @@
-package io.github.lbenedetto.internal.util
+package io.github.lbenedetto.internal.data
 
 actual class FloatBuffer(private val array: FloatArray, private var pos: Int = 0) {
   actual fun remaining(): Int = array.size - pos

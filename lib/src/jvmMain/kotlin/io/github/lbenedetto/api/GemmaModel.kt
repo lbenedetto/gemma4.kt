@@ -9,7 +9,6 @@ import io.github.lbenedetto.internal.sampler.Sampler
 import io.github.lbenedetto.internal.sampler.ToppSampler
 import okio.Path
 import okio.Path.Companion.toPath
-import java.util.function.IntConsumer
 import kotlin.random.Random
 
 /**
@@ -147,7 +146,7 @@ class GemmaModel private constructor(private val model: Llama) {
 internal fun tokenAccumulator(
   model: Llama,
   config: GenerationConfig,
-): Pair<IntConsumer, () -> GenerationResult> {
+): Pair<(Int) -> Unit, () -> GenerationResult> {
   val tokenizer = model.tokenizer
   val channelOpen = tokenizer.specialTokens["<|channel>"]
   val channelClose = tokenizer.specialTokens["<channel|>"]
@@ -157,18 +156,18 @@ internal fun tokenAccumulator(
   val thinkBuf = if (config.thinking && hasThinkingSupport) StringBuilder() else null
   var inChannel = false
 
-  val callback = IntConsumer { token ->
+  val callback = consumer@{ token: Int ->
     if (hasThinkingSupport && token == channelOpen) {
       inChannel = true
       config.onThinkingStart?.invoke()
-      return@IntConsumer
+      return@consumer
     }
     if (hasThinkingSupport && token == channelClose) {
       inChannel = false
       config.onThinkingEnd?.invoke()
-      return@IntConsumer
+      return@consumer
     }
-    if (tokenizer.isSpecialToken(token)) return@IntConsumer
+    if (tokenizer.isSpecialToken(token)) return@consumer
 
     val piece = tokenizer.decode(listOf(token))
     if (inChannel) {

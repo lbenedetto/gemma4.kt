@@ -2,7 +2,6 @@ package io.github.lbenedetto.internal.model
 
 import io.github.lbenedetto.internal.floattensor.ArrayFloatTensor
 import io.github.lbenedetto.internal.floattensor.FloatTensor
-import java.util.stream.IntStream
 
 internal class LlamaState internal constructor(config: LlamaConfiguration) {
   val x: FloatTensor // activation at current time stamp (embeddingLength,)
@@ -37,9 +36,7 @@ internal class LlamaState internal constructor(config: LlamaConfiguration) {
 
   init {
     val maxQueryDim = config.numberOfHeads * config.headSizeFull
-    val maxKVDim =
-      IntStream.range(0, config.numberOfLayers).map { layer: Int -> config.kvDim(layer) }.max()
-        .orElse(0)
+    val maxKVDim = (0 until config.numberOfLayers).maxOfOrNull { config.kvDim(it) } ?: 0
     val maxHiddenDim = config.maxHiddenDim()
     this.x = ArrayFloatTensor.allocate(config.embeddingLength)
     this.xb = ArrayFloatTensor.allocate(config.embeddingLength)

@@ -1,7 +1,7 @@
 package io.github.lbenedetto.internal.floattensor
 
+import io.github.lbenedetto.internal.data.MemorySegment
 import io.github.lbenedetto.internal.floattensor.VectorSpeciesConfig.F_SPECIES
-import io.github.lbenedetto.internal.util.MemorySegment
 import io.github.lbenedetto.internal.util.vectorMathEnabled
 import jdk.incubator.vector.FloatVector
 import jdk.incubator.vector.VectorOperators

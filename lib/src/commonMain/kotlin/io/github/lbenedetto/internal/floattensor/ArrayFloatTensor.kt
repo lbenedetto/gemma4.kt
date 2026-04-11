@@ -1,8 +1,8 @@
 package io.github.lbenedetto.internal.floattensor
 
+import io.github.lbenedetto.internal.data.FloatBuffer
 import io.github.lbenedetto.internal.floattensor.FloatTensor.Companion.numberOfElements
 import io.github.lbenedetto.internal.floattensor.FloatTensor.Companion.scalarDot
-import io.github.lbenedetto.internal.util.FloatBuffer
 import io.github.lbenedetto.internal.util.Math
 import io.github.lbenedetto.internal.util.vectorMathEnabled
 

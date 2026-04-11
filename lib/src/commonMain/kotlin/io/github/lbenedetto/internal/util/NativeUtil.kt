@@ -1,6 +1,7 @@
 package io.github.lbenedetto.internal.util
 
 internal expect fun printlnStderr(message: String)
+internal expect fun printStderr(message: String)
 
 internal fun assert(value: Boolean) {
   assert(value) { "Assertion failed" }

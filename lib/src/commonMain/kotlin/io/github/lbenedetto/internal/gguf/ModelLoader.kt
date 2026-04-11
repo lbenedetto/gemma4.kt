@@ -1,5 +1,7 @@
 package io.github.lbenedetto.internal.gguf
 
+import io.github.lbenedetto.internal.data.FloatBuffer
+import io.github.lbenedetto.internal.data.wrapWithFloatBuffer
 import io.github.lbenedetto.internal.floattensor.FloatTensor
 import io.github.lbenedetto.internal.floattensor.FloatTensorFactory
 import io.github.lbenedetto.internal.model.Llama
@@ -8,11 +10,8 @@ import io.github.lbenedetto.internal.model.LlamaWeights
 import io.github.lbenedetto.internal.model.RoPE
 import io.github.lbenedetto.internal.tokenizer.GemmaTokenizer
 import io.github.lbenedetto.internal.tokenizer.Vocabulary
-import io.github.lbenedetto.internal.util.FloatBuffer
 import io.github.lbenedetto.internal.util.Timer
-import io.github.lbenedetto.internal.util.wrapWithFloatBuffer
 import okio.Path
-import java.util.*
 
 internal object ModelLoader {
   private fun loadVocabulary(metadata: Map<String, Any>): Vocabulary {
@@ -47,15 +46,15 @@ internal object ModelLoader {
     val headSizeFull = metadata["gemma4.attention.key_length"] as Int
     val headSizeSWA = metadata["gemma4.attention.key_length_swa"] as Int
     val slidingWindow = metadata["gemma4.attention.sliding_window"] as Int
-    val logitSoftcapping = metadata.getOrDefault("gemma4.final_logit_softcapping", 0f) as Float
-    val rmsNormEps = metadata.getOrDefault("gemma4.attention.layer_norm_rms_epsilon", 1e-6f) as Float
-    val ropeTheta = metadata.getOrDefault("gemma4.rope.freq_base", 1000000f) as Float
-    val ropeThetaSWA = metadata.getOrDefault("gemma4.rope.freq_base_swa", 10000f) as Float
+    val logitSoftcapping = metadata.getOrElse("gemma4.final_logit_softcapping") { 0f } as Float
+    val rmsNormEps = metadata.getOrElse("gemma4.attention.layer_norm_rms_epsilon") { 1e-6f } as Float
+    val ropeTheta = metadata.getOrElse("gemma4.rope.freq_base") { 1000000f } as Float
+    val ropeThetaSWA = metadata.getOrElse("gemma4.rope.freq_base_swa") { 10000f } as Float
 
     // MoE parameters
-    val expertCount = metadata.getOrDefault("gemma4.expert_count", 0) as Int
-    val expertUsedCount = metadata.getOrDefault("gemma4.expert_used_count", 0) as Int
-    val expertFeedForwardLength = metadata.getOrDefault("gemma4.expert_feed_forward_length", 0) as Int
+    val expertCount = metadata.getOrElse("gemma4.expert_count") { 0 } as Int
+    val expertUsedCount = metadata.getOrElse("gemma4.expert_used_count") { 0 } as Int
+    val expertFeedForwardLength = metadata.getOrElse("gemma4.expert_feed_forward_length") { 0 } as Int
 
     // Per-layer feed forward lengths (scalar for uniform, array for variable)
     val feedForwardLength: IntArray
@@ -64,7 +63,7 @@ internal object ModelLoader {
       feedForwardLength = ffnRaw
     } else {
       feedForwardLength = IntArray(numberOfLayers)
-      Arrays.fill(feedForwardLength, ffnRaw!! as Int)
+      feedForwardLength.fill(ffnRaw!! as Int)
     }
 
     val tensorInfos = gguf.tensorInfos
@@ -102,10 +101,10 @@ internal object ModelLoader {
     }
 
     // Shared KV layers: last N layers reuse KV from earlier layers
-    val sharedKvLayers = metadata.getOrDefault("gemma4.attention.shared_kv_layers", 0) as Int
+    val sharedKvLayers = metadata.getOrElse("gemma4.attention.shared_kv_layers") { 0 } as Int
     val nLayerKvFromStart = numberOfLayers - sharedKvLayers
 
-    val embeddingLengthPerLayer = metadata.getOrDefault("gemma4.embedding_length_per_layer_input", 0) as Int
+    val embeddingLengthPerLayer = metadata.getOrElse("gemma4.embedding_length_per_layer_input") { 0 } as Int
 
     val config = LlamaConfiguration(
       embeddingLength,

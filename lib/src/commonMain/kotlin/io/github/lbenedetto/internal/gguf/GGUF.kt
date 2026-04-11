@@ -1,7 +1,11 @@
 package io.github.lbenedetto.internal.gguf
 
+import io.github.lbenedetto.internal.data.MemorySegment
 import io.github.lbenedetto.internal.floattensor.FloatTensor
-import io.github.lbenedetto.internal.util.*
+import io.github.lbenedetto.internal.util.Math
+import io.github.lbenedetto.internal.util.Timer
+import io.github.lbenedetto.internal.util.assert
+import io.github.lbenedetto.internal.util.toCodePoints
 import okio.*
 import okio.internal.commonToUtf8String
 

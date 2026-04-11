@@ -1,16 +1,15 @@
 package io.github.lbenedetto.internal.model
 
+import io.github.lbenedetto.internal.data.FloatBuffer
 import io.github.lbenedetto.internal.floattensor.FloatTensor
 import io.github.lbenedetto.internal.floattensor.parallelFor
 import io.github.lbenedetto.internal.sampler.Sampler
 import io.github.lbenedetto.internal.tokenizer.GemmaTokenizer
 import io.github.lbenedetto.internal.tokenizer.GemmaTokenizer.Companion.replaceControlCharacters
-import io.github.lbenedetto.internal.util.FloatBuffer
-import java.util.function.IntConsumer
-import kotlin.math.max
-import kotlin.math.pow
-import kotlin.math.sqrt
-import kotlin.math.tanh
+import io.github.lbenedetto.internal.util.printStderr
+import io.github.lbenedetto.internal.util.printlnStderr
+import kotlin.math.*
+import kotlin.time.TimeSource
 
 internal data class Llama(val configuration: LlamaConfiguration, val tokenizer: GemmaTokenizer, val weights: LlamaWeights?) {
   fun createNewState(): LlamaState {
@@ -21,7 +20,7 @@ internal data class Llama(val configuration: LlamaConfiguration, val tokenizer: 
 
   companion object {
     fun gelu(x: Float): Float {
-      return (0.5 * x * (1 + tanh(sqrt(2 / Math.PI) * (x + 0.044715 * x.toDouble().pow(3.0))))).toFloat()
+      return (0.5 * x * (1 + tanh(sqrt(2 / PI) * (x + 0.044715 * x.toDouble().pow(3.0))))).toFloat()
     }
 
     fun rmsnorm(out: FloatTensor, x: FloatTensor, weight: FloatBuffer, size: Int, rmsNormEps: Float) {
@@ -406,6 +405,17 @@ internal data class Llama(val configuration: LlamaConfiguration, val tokenizer: 
     private const val ANSI_CYAN = "\u001b[36m"
     private const val ANSI_RESET = "\u001b[0m"
 
+    private val epoch = TimeSource.Monotonic.markNow()
+
+    private fun now(): Long {
+      return epoch.elapsedNow().inWholeNanoseconds
+    }
+
+    private fun Double.roundedTwoDecimals(): String {
+      val rounded = round(this * 100) / 100.0
+      return rounded.toString()
+    }
+
     fun generateTokens(
       model: Llama,
       state: LlamaState,
@@ -416,11 +426,11 @@ internal data class Llama(val configuration: LlamaConfiguration, val tokenizer: 
       sampler: Sampler,
       echo: Boolean,
       color: Boolean,
-      onTokenGenerated: IntConsumer
+      onTokenGenerated: (Int) -> Unit
     ): MutableList<Int> {
       var maxTokens = maxTokens
-      val startNanos = System.nanoTime()
-      var startGen: Long = 0
+      val startNanos = now()
+      var startGen = 0L
       if (maxTokens < 0 || model.configuration.contextLength < maxTokens) {
         maxTokens = model.configuration.contextLength
       }
@@ -433,18 +443,18 @@ internal data class Llama(val configuration: LlamaConfiguration, val tokenizer: 
         if (promptIndex < promptTokens.size) {
           nextToken = promptTokens[promptIndex++]
           if (echo) {
-            System.err.print(replaceControlCharacters(model.tokenizer.decode(listOf(nextToken))))
+            printStderr(replaceControlCharacters(model.tokenizer.decode(listOf(nextToken))))
           }
           if (promptIndex >= promptTokens.size) {
-            startGen = System.nanoTime()
+            startGen = now()
           }
         } else {
           nextToken = sampler.sampleToken(state.logits)
           if (echo) {
-            System.err.print(replaceControlCharacters(model.tokenizer.decode(listOf(nextToken))))
+            printStderr(replaceControlCharacters(model.tokenizer.decode(listOf(nextToken))))
           }
           generatedTokens.add(nextToken)
-          onTokenGenerated.accept(nextToken)
+          onTokenGenerated(nextToken)
           if (stopTokens.contains(nextToken)) {
             break
           }
@@ -453,16 +463,16 @@ internal data class Llama(val configuration: LlamaConfiguration, val tokenizer: 
         state.latestToken = token
       }
 
-      val elapsedNanos = System.nanoTime() - startNanos
+      val elapsedNanos = now() - startNanos
       val promptNanos = startGen - startNanos
       val genNanos = elapsedNanos - startGen + startNanos
       val timingPrefix = if (color) ANSI_CYAN else ""
       val timingSuffix = if (color) ANSI_RESET else ""
       val contextUsed = startPosition + promptIndex + generatedTokens.size
       val contextLength = model.configuration.contextLength
-      val promptTps = "%.2f".format(promptTokens.size / (promptNanos / 1000000000.0))
-      val genTps = "%.2f".format(generatedTokens.size / (genNanos / 1000000000.0))
-      System.err.println(
+      val promptTps = (promptTokens.size / (promptNanos / 1000000000.0)).roundedTwoDecimals()
+      val genTps = (generatedTokens.size / (genNanos / 1000000000.0)).roundedTwoDecimals()
+      printlnStderr(
         "\n${timingPrefix}" +
             "context: $contextUsed/$contextLength " +
             "prompt: $promptTps tokens/s (${promptTokens.size}) " +
