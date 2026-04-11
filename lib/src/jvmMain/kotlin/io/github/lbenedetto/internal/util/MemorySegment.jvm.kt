@@ -1,7 +1,11 @@
 package io.github.lbenedetto.internal.util
 
+import okio.Path
+import java.lang.foreign.Arena
 import java.lang.foreign.ValueLayout
 import java.nio.ByteOrder
+import java.nio.channels.FileChannel
+import java.nio.file.StandardOpenOption
 import java.lang.foreign.MemorySegment as JMemorySegment
 
 actual class MemorySegment(private val memorySegment: JMemorySegment) {
@@ -28,5 +32,18 @@ actual class MemorySegment(private val memorySegment: JMemorySegment) {
       .let { FloatBuffer(it) }
   }
 
+  actual fun slice(offset: Long, size: Long): MemorySegment {
+    return MemorySegment(memorySegment.asSlice(offset, size))
+  }
+
   fun actual() = memorySegment
+
+  actual companion object {
+    actual fun mmap(path: Path, offset: Long, size: Long): MemorySegment {
+      val jpath = java.nio.file.Path.of(path.toString())
+      FileChannel.open(jpath, StandardOpenOption.READ).use { fc ->
+        return MemorySegment(fc.map(FileChannel.MapMode.READ_ONLY, offset, size, Arena.global()))
+      }
+    }
+  }
 }

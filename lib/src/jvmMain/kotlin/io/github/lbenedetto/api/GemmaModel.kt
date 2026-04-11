@@ -7,7 +7,8 @@ import io.github.lbenedetto.internal.model.*
 import io.github.lbenedetto.internal.sampler.CategoricalSampler
 import io.github.lbenedetto.internal.sampler.Sampler
 import io.github.lbenedetto.internal.sampler.ToppSampler
-import java.nio.file.Path
+import okio.Path
+import okio.Path.Companion.toPath
 import java.util.function.IntConsumer
 import kotlin.random.Random
 
@@ -112,6 +113,11 @@ class GemmaModel private constructor(private val model: Llama) {
         ?: ModelLoader.loadModel(modelPath, contextLength)
       return GemmaModel(llama)
     }
+
+    @JvmStatic
+    @JvmOverloads
+    fun load(modelPath: java.nio.file.Path, contextLength: Int = DEFAULT_MAX_TOKENS): GemmaModel =
+      load(modelPath.toString().toPath(), contextLength)
 
     internal fun buildSampler(vocabularySize: Int, config: GenerationConfig): Sampler {
       if (config.temperature == 0.0f) return Sampler.ARGMAX

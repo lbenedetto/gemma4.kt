@@ -6,11 +6,11 @@ import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldNotBeBlank
-import java.nio.file.Path
+import okio.Path.Companion.toPath
 
 class GemmaModelIntegrationSpec : BehaviorSpec({
 
-    val model = GemmaModel.load(Path.of("../models/gemma-4-E2B-it-Q8_0.gguf"), contextLength = 2048)
+    val model = GemmaModel.load("../models/gemma-4-E2B-it-Q8_0.gguf".toPath(), contextLength = 2048)
 
     Given("a loaded GemmaModel") {
 

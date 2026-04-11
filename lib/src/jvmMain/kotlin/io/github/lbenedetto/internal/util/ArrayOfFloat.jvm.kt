@@ -8,8 +8,8 @@ actual class FloatBuffer(
 ) {
   actual fun remaining(): Int = floatBuffer.remaining()
 
-  actual fun get(array: FloatArray): FloatBuffer {
-    floatBuffer.get(array)
+  actual fun get(destination: FloatArray): FloatBuffer {
+    floatBuffer.get(destination)
     return this
   }
 

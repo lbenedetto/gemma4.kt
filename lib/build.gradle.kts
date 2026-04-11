@@ -20,6 +20,9 @@ kotlin {
     sourceSets {
         commonMain {
             kotlin.srcDir("src/commonMain/kotlin")
+            dependencies {
+                implementation(libs.okio)
+            }
         }
         nativeMain {
             kotlin.srcDir("src/nativeMain/kotlin")
