@@ -1,16 +1,17 @@
 package io.github.lbenedetto.api
 
 import io.github.lbenedetto.internal.model.*
+import io.github.lbenedetto.internal.sampler.Sampler
 
 /**
- * A stateful multi-turn conversation. Obtain one from [GemmaModel.chat].
+ * A stateful multi-turn conversation. Obtain one from [io.github.lbenedetto.api.GemmaModel.chat].
  *
- * The session owns its [LlamaState] and accumulates conversation tokens across
+ * The session owns its [io.github.lbenedetto.internal.model.LlamaState] and accumulates conversation tokens across
  * calls to [send], so the model always has full context of the prior exchange.
  */
 class ChatSession internal constructor(
-    private val model: Llama,
-    private val config: GenerationConfig,
+  private val model: Llama,
+  private val config: GenerationConfig,
 ) {
     private var state: LlamaState? = null
     private val chatFormat = GemmaChatFormat(model.tokenizer)
@@ -38,7 +39,7 @@ class ChatSession internal constructor(
         conversationTokens.addAll(chatFormat.encodeMessage(Message(Role.USER, message)))
         conversationTokens.addAll(chatFormat.encodeHeader(Message(Role.MODEL, "")))
 
-        val sampler = GemmaModel.buildSampler(model.configuration.vocabularySize, config)
+        val sampler = Sampler.build(model.configuration.vocabularySize, config)
         val stopTokens = chatFormat.stopTokens
         val (callback, buildResult) = tokenAccumulator(model, config)
 

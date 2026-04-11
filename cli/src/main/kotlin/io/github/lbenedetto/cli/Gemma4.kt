@@ -1,5 +1,6 @@
 package io.github.lbenedetto.cli
 
+import io.github.lbenedetto.api.Gemma
 import io.github.lbenedetto.api.GemmaModel
 import io.github.lbenedetto.api.GenerationConfig
 import io.github.lbenedetto.api.GenerationResult
@@ -58,7 +59,7 @@ object Gemma4 {
     }
   }
 
-  fun runInteractive(model: GemmaModel, options: Options) {
+  fun runInteractive(model: Gemma, options: Options) {
     val chat = model.chat { applyOptions(options) }
 
     while (true) {
@@ -84,7 +85,7 @@ object Gemma4 {
     }
   }
 
-  fun runInstructOnce(model: GemmaModel, options: Options) {
+  fun runInstructOnce(model: Gemma, options: Options) {
     val result = options.suffix
       ?.let { model.fillInMiddle(options.prompt!!, it) { applyOptions(options) } }
       ?: model.generate(options.prompt!!) { applyOptions(options) }
