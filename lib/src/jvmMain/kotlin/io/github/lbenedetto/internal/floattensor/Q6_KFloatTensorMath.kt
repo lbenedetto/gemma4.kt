@@ -102,10 +102,10 @@ actual object Q6_KFloatTensorMath {
               val q1f = q1.castShape(F_SPECIES, 0).reinterpretAsFloats()
               val q2f = q2.castShape(F_SPECIES, 0).reinterpretAsFloats()
               val q3f = q3.castShape(F_SPECIES, 0).reinterpretAsFloats()
-              acc = q0f.mul(ds0Vec).fma(that.getFloatVector(F_SPECIES, sg0Idx), acc)
-              acc = q1f.mul(ds1Vec).fma(that.getFloatVector(F_SPECIES, sg1Idx), acc)
-              acc = q2f.mul(ds2Vec).fma(that.getFloatVector(F_SPECIES, sg2Idx), acc)
-              acc = q3f.mul(ds3Vec).fma(that.getFloatVector(F_SPECIES, sg3Idx), acc)
+              acc = q0f.mul(ds0Vec).fma(that.getFloatVector(sg0Idx), acc)
+              acc = q1f.mul(ds1Vec).fma(that.getFloatVector(sg1Idx), acc)
+              acc = q2f.mul(ds2Vec).fma(that.getFloatVector(sg2Idx), acc)
+              acc = q3f.mul(ds3Vec).fma(that.getFloatVector(sg3Idx), acc)
             }
 
             256 -> {
@@ -115,10 +115,10 @@ actual object Q6_KFloatTensorMath {
                 val q1f = q1.castShape(F_SPECIES, p).reinterpretAsFloats()
                 val q2f = q2.castShape(F_SPECIES, p).reinterpretAsFloats()
                 val q3f = q3.castShape(F_SPECIES, p).reinterpretAsFloats()
-                acc = q0f.mul(ds0Vec).fma(that.getFloatVector(F_SPECIES, sg0Idx + off), acc)
-                acc = q1f.mul(ds1Vec).fma(that.getFloatVector(F_SPECIES, sg1Idx + off), acc)
-                acc = q2f.mul(ds2Vec).fma(that.getFloatVector(F_SPECIES, sg2Idx + off), acc)
-                acc = q3f.mul(ds3Vec).fma(that.getFloatVector(F_SPECIES, sg3Idx + off), acc)
+                acc = q0f.mul(ds0Vec).fma(that.getFloatVector(sg0Idx + off), acc)
+                acc = q1f.mul(ds1Vec).fma(that.getFloatVector(sg1Idx + off), acc)
+                acc = q2f.mul(ds2Vec).fma(that.getFloatVector(sg2Idx + off), acc)
+                acc = q3f.mul(ds3Vec).fma(that.getFloatVector(sg3Idx + off), acc)
               }
             }
 
@@ -129,10 +129,10 @@ actual object Q6_KFloatTensorMath {
                 val q1f = q1.castShape(F_SPECIES, p).reinterpretAsFloats()
                 val q2f = q2.castShape(F_SPECIES, p).reinterpretAsFloats()
                 val q3f = q3.castShape(F_SPECIES, p).reinterpretAsFloats()
-                acc = q0f.mul(ds0Vec).fma(that.getFloatVector(F_SPECIES, sg0Idx + off), acc)
-                acc = q1f.mul(ds1Vec).fma(that.getFloatVector(F_SPECIES, sg1Idx + off), acc)
-                acc = q2f.mul(ds2Vec).fma(that.getFloatVector(F_SPECIES, sg2Idx + off), acc)
-                acc = q3f.mul(ds3Vec).fma(that.getFloatVector(F_SPECIES, sg3Idx + off), acc)
+                acc = q0f.mul(ds0Vec).fma(that.getFloatVector(sg0Idx + off), acc)
+                acc = q1f.mul(ds1Vec).fma(that.getFloatVector(sg1Idx + off), acc)
+                acc = q2f.mul(ds2Vec).fma(that.getFloatVector(sg2Idx + off), acc)
+                acc = q3f.mul(ds3Vec).fma(that.getFloatVector(sg3Idx + off), acc)
               }
             }
 

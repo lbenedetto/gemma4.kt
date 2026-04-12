@@ -52,7 +52,7 @@ actual object Q5_1FloatTensorMath {
         var i = 0
         while (i < vecUpper) {
           val w = FloatVector.fromArray(F_SPECIES, decoded, i)
-          val x = that.getFloatVector(F_SPECIES, thatOffset + j + i)
+          val x = that.getFloatVector(thatOffset + j + i)
           acc = w.fma(x, acc)
           i += F_SPECIES.length()
         }

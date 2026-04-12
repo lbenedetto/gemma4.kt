@@ -44,52 +44,36 @@ actual object Q4_0FloatTensorMath {
       val hiBytes: ByteVector = wBytes.lanewise(VectorOperators.LSHR, 4L).sub(8.toByte())
       when (F_SPECIES.vectorBitSize()) {
         512 -> {
-          val s0 = that.getFloatVector(F_SPECIES, thatOffset + j)
+          val s0 = that.getFloatVector(thatOffset + j)
             .mul(loBytes.castShape(F_SPECIES, 0))
-          val s1 = that.getFloatVector(
-            F_SPECIES,
-            thatOffset + j + F_SPECIES.length()
-          ).mul(hiBytes.castShape(F_SPECIES, 0))
+          val s1 = that.getFloatVector(thatOffset + j + F_SPECIES.length())
+            .mul(hiBytes.castShape(F_SPECIES, 0))
           `val` = s0.add(s1).fma(wScale, `val`)
         }
 
         256 -> {
-          var s0 = that.getFloatVector(F_SPECIES, thatOffset + j)
+          var s0 = that.getFloatVector(thatOffset + j)
             .mul(loBytes.castShape(F_SPECIES, 0))
-          var s1 = that.getFloatVector(
-            F_SPECIES,
-            thatOffset + j + 2 * F_SPECIES.length()
-          ).mul(hiBytes.castShape(F_SPECIES, 0))
-          s0 = that.getFloatVector(
-            F_SPECIES,
-            thatOffset + j + F_SPECIES.length()
-          ).fma(loBytes.castShape(F_SPECIES, 1), s0)
-          s1 = that.getFloatVector(
-            F_SPECIES,
-            thatOffset + j + 3 * F_SPECIES.length()
-          ).fma(hiBytes.castShape(F_SPECIES, 1), s1)
+          var s1 = that.getFloatVector(thatOffset + j + 2 * F_SPECIES.length())
+            .mul(hiBytes.castShape(F_SPECIES, 0))
+          s0 = that.getFloatVector(thatOffset + j + F_SPECIES.length())
+            .fma(loBytes.castShape(F_SPECIES, 1), s0)
+          s1 = that.getFloatVector(thatOffset + j + 3 * F_SPECIES.length())
+            .fma(hiBytes.castShape(F_SPECIES, 1), s1)
           `val` = s0.add(s1).fma(wScale, `val`)
         }
 
         128 -> {
           for (i in 0..1) {
             val tmp = if (i == 0) loBytes else hiBytes
-            var s0 = that.getFloatVector(
-              F_SPECIES,
-              thatOffset + j + (i * 4) * F_SPECIES.length()
-            ).mul(tmp.castShape(F_SPECIES, 0))
-            var s1 = that.getFloatVector(
-              F_SPECIES,
-              thatOffset + j + (i * 4 + 2) * F_SPECIES.length()
-            ).mul(tmp.castShape(F_SPECIES, 2))
-            s0 = that.getFloatVector(
-              F_SPECIES,
-              thatOffset + j + (i * 4 + 1) * F_SPECIES.length()
-            ).fma(tmp.castShape(F_SPECIES, 1), s0)
-            s1 = that.getFloatVector(
-              F_SPECIES,
-              thatOffset + j + (i * 4 + 3) * F_SPECIES.length()
-            ).fma(tmp.castShape(F_SPECIES, 3), s1)
+            var s0 = that.getFloatVector(thatOffset + j + (i * 4) * F_SPECIES.length())
+              .mul(tmp.castShape(F_SPECIES, 0))
+            var s1 = that.getFloatVector(thatOffset + j + (i * 4 + 2) * F_SPECIES.length())
+              .mul(tmp.castShape(F_SPECIES, 2))
+            s0 = that.getFloatVector(thatOffset + j + (i * 4 + 1) * F_SPECIES.length())
+              .fma(tmp.castShape(F_SPECIES, 1), s0)
+            s1 = that.getFloatVector(thatOffset + j + (i * 4 + 3) * F_SPECIES.length())
+              .fma(tmp.castShape(F_SPECIES, 3), s1)
             `val` = s0.add(s1).fma(wScale, `val`)
           }
         }

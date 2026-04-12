@@ -46,11 +46,8 @@ actual object Q4_1FloatTensorMath {
       val hiBytes: ByteVector = wBytes.lanewise(VectorOperators.LSHR, 4L)
       when (F_SPECIES.vectorBitSize()) {
         512 -> {
-          val that0 = that.getFloatVector(F_SPECIES, thatOffset + j)
-          val that1 = that.getFloatVector(
-            F_SPECIES,
-            thatOffset + j + F_SPECIES.length()
-          )
+          val that0 = that.getFloatVector(thatOffset + j)
+          val that1 = that.getFloatVector(thatOffset + j + F_SPECIES.length())
           val s0 = that0.mul(loBytes.castShape(F_SPECIES, 0))
           val s1 = that1.mul(hiBytes.castShape(F_SPECIES, 0))
           `val` = s0.add(s1).fma(wDelta, `val`)
@@ -58,19 +55,10 @@ actual object Q4_1FloatTensorMath {
         }
 
         256 -> {
-          val that0 = that.getFloatVector(F_SPECIES, thatOffset + j)
-          val that1 = that.getFloatVector(
-            F_SPECIES,
-            thatOffset + j + F_SPECIES.length()
-          )
-          val that2 = that.getFloatVector(
-            F_SPECIES,
-            thatOffset + j + 2 * F_SPECIES.length()
-          )
-          val that3 = that.getFloatVector(
-            F_SPECIES,
-            thatOffset + j + 3 * F_SPECIES.length()
-          )
+          val that0 = that.getFloatVector(thatOffset + j)
+          val that1 = that.getFloatVector(thatOffset + j + F_SPECIES.length())
+          val that2 = that.getFloatVector(thatOffset + j + 2 * F_SPECIES.length())
+          val that3 = that.getFloatVector(thatOffset + j + 3 * F_SPECIES.length())
           var s0 = that0.mul(loBytes.castShape(F_SPECIES, 0))
           var s1 = that2.mul(hiBytes.castShape(F_SPECIES, 0))
           s0 = that1.fma(loBytes.castShape(F_SPECIES, 1), s0)
@@ -82,29 +70,21 @@ actual object Q4_1FloatTensorMath {
         128 -> {
           for (i in 0..1) {
             val tmp = if (i == 0) loBytes else hiBytes
-            var s0 = that.getFloatVector(
-              F_SPECIES,
-              thatOffset + j + (i * 4) * F_SPECIES.length()
-            ).mul(tmp.castShape(F_SPECIES, 0))
-            var s1 = that.getFloatVector(
-              F_SPECIES,
-              thatOffset + j + (i * 4 + 2) * F_SPECIES.length()
-            ).mul(tmp.castShape(F_SPECIES, 2))
-            s0 = that.getFloatVector(
-              F_SPECIES,
-              thatOffset + j + (i * 4 + 1) * F_SPECIES.length()
-            ).fma(tmp.castShape(F_SPECIES, 1), s0)
-            s1 = that.getFloatVector(
-              F_SPECIES,
-              thatOffset + j + (i * 4 + 3) * F_SPECIES.length()
-            ).fma(tmp.castShape(F_SPECIES, 3), s1)
+            var s0 = that.getFloatVector(thatOffset + j + (i * 4) * F_SPECIES.length())
+              .mul(tmp.castShape(F_SPECIES, 0))
+            var s1 = that.getFloatVector(thatOffset + j + (i * 4 + 2) * F_SPECIES.length())
+              .mul(tmp.castShape(F_SPECIES, 2))
+            s0 = that.getFloatVector(thatOffset + j + (i * 4 + 1) * F_SPECIES.length())
+              .fma(tmp.castShape(F_SPECIES, 1), s0)
+            s1 = that.getFloatVector(thatOffset + j + (i * 4 + 3) * F_SPECIES.length())
+              .fma(tmp.castShape(F_SPECIES, 3), s1)
             `val` = s0.add(s1).fma(wDelta, `val`)
           }
           // vectorized min contribution
           var thatSum = FloatVector.zero(F_SPECIES)
           var k = 0
           while (k < GGMLType.Q4_1.blockSize) {
-            thatSum = thatSum.add(that.getFloatVector(F_SPECIES, thatOffset + j + k))
+            thatSum = thatSum.add(that.getFloatVector(thatOffset + j + k))
             k += F_SPECIES.length()
           }
           `val` = thatSum.fma(wMin, `val`)

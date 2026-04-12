@@ -30,8 +30,8 @@ actual object Q4_KFloatTensorMath {
       j += alignmentBound
     }
 
-    var `val` = FloatVector.zero(F_SPECIES!!)
-    var val2 = FloatVector.zero(F_SPECIES)
+    var value1 = FloatVector.zero(F_SPECIES!!)
+    var value2 = FloatVector.zero(F_SPECIES)
     var blockOffset: Long = (thisOffset + j).toLong() / BLOCK_SIZE * TYPE_SIZE
     val upperBound: Int = j + (size - j) / BLOCK_SIZE * BLOCK_SIZE
 
@@ -71,50 +71,36 @@ actual object Q4_KFloatTensorMath {
           when (F_SPECIES.vectorBitSize()) {
             512 -> {
               val loQ = loBytes.castShape(F_SPECIES, 0).reinterpretAsFloats()
-              `val` = loQ.fma(d1Vec, negM1Vec).fma(that.getFloatVector(F_SPECIES, loIdx), `val`)
               val hiQ = hiBytes.castShape(F_SPECIES, 0).reinterpretAsFloats()
-              val2 = hiQ.fma(d2Vec, negM2Vec).fma(that.getFloatVector(F_SPECIES, hiIdx), val2)
+              value1 = loQ.fma(d1Vec, negM1Vec)
+                .fma(that.getFloatVector(loIdx), value1)
+              value2 = hiQ.fma(d2Vec, negM2Vec)
+                .fma(that.getFloatVector(hiIdx), value2)
             }
 
             256 -> {
               val loQ0 = loBytes.castShape(F_SPECIES, 0).reinterpretAsFloats()
               val loQ1 = loBytes.castShape(F_SPECIES, 1).reinterpretAsFloats()
-              `val` =
-                loQ0.fma(d1Vec, negM1Vec).fma(that.getFloatVector(F_SPECIES, loIdx), `val`)
-              val2 = loQ1.fma(d1Vec, negM1Vec).fma(
-                that.getFloatVector(
-                  F_SPECIES,
-                  loIdx + F_SPECIES.length()
-                ), val2
-              )
+              value1 = loQ0.fma(d1Vec, negM1Vec)
+                .fma(that.getFloatVector(loIdx), value1)
+              value2 = loQ1.fma(d1Vec, negM1Vec)
+                .fma(that.getFloatVector(loIdx + F_SPECIES.length()), value2)
               val hiQ0 = hiBytes.castShape(F_SPECIES, 0).reinterpretAsFloats()
               val hiQ1 = hiBytes.castShape(F_SPECIES, 1).reinterpretAsFloats()
-              `val` =
-                hiQ0.fma(d2Vec, negM2Vec).fma(that.getFloatVector(F_SPECIES, hiIdx), `val`)
-              val2 = hiQ1.fma(d2Vec, negM2Vec).fma(
-                that.getFloatVector(
-                  F_SPECIES,
-                  hiIdx + F_SPECIES.length()
-                ), val2
-              )
+              value1 = hiQ0.fma(d2Vec, negM2Vec)
+                .fma(that.getFloatVector(hiIdx), value1)
+              value2 = hiQ1.fma(d2Vec, negM2Vec)
+                .fma(that.getFloatVector(hiIdx + F_SPECIES.length()), value2)
             }
 
             128 -> {
               for (p in 0..3) {
                 val loQ = loBytes.castShape(F_SPECIES, p).reinterpretAsFloats()
-                `val` = loQ.fma(d1Vec, negM1Vec).fma(
-                  that.getFloatVector(
-                    F_SPECIES,
-                    loIdx + p * F_SPECIES.length()
-                  ), `val`
-                )
+                value1 = loQ.fma(d1Vec, negM1Vec)
+                  .fma(that.getFloatVector(loIdx + p * F_SPECIES.length()), value1)
                 val hiQ = hiBytes.castShape(F_SPECIES, p).reinterpretAsFloats()
-                val2 = hiQ.fma(d2Vec, negM2Vec).fma(
-                  that.getFloatVector(
-                    F_SPECIES,
-                    hiIdx + p * F_SPECIES.length()
-                  ), val2
-                )
+                value2 = hiQ.fma(d2Vec, negM2Vec)
+                  .fma(that.getFloatVector(hiIdx + p * F_SPECIES.length()), value2)
               }
             }
 
@@ -125,7 +111,7 @@ actual object Q4_KFloatTensorMath {
       j += BLOCK_SIZE
       blockOffset += TYPE_SIZE.toLong()
     }
-    result += `val`.add(val2).reduceLanes(VectorOperators.ADD)
+    result += value1.add(value2).reduceLanes(VectorOperators.ADD)
 
     // Handle tail
     if (j < size) {

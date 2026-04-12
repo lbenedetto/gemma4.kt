@@ -5,7 +5,6 @@ import io.github.lbenedetto.internal.floattensor.VectorSpeciesConfig.F_SPECIES
 import io.github.lbenedetto.internal.util.vectorMathEnabled
 import jdk.incubator.vector.FloatVector
 import jdk.incubator.vector.VectorOperators
-import jdk.incubator.vector.VectorSpecies
 
 actual object ArrayFloatTensorMath {
 
@@ -35,7 +34,7 @@ actual object ArrayFloatTensorMath {
   }
 }
 
-internal fun ArrayFloatTensor.getFloatVector(species: VectorSpecies<Float>, offset: Int): FloatVector {
+internal fun ArrayFloatTensor.getFloatVector(offset: Int): FloatVector {
   if (!vectorMathEnabled()) {
     throw UnsupportedOperationException()
   }

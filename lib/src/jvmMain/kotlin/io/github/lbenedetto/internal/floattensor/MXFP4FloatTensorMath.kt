@@ -60,9 +60,9 @@ actual object MXFP4FloatTensorMath {
               0
             ) as FloatVector?)!!
           )
-          val xLo = that.getFloatVector(F_SPECIES, thatOffset + j)
+          val xLo = that.getFloatVector(thatOffset + j)
           val xHi =
-            that.getFloatVector(F_SPECIES, thatOffset + j + QK_MXFP4 / 2)
+            that.getFloatVector(thatOffset + j + QK_MXFP4 / 2)
           blockSum += loCoeffs.fma(xLo, hiCoeffs.mul(xHi)).reduceLanes(VectorOperators.ADD)
         }
 
@@ -88,17 +88,10 @@ actual object MXFP4FloatTensorMath {
               1
             ) as FloatVector?)!!
           )
-          val x0 = that.getFloatVector(F_SPECIES, thatOffset + j)
-          val x1 = that.getFloatVector(
-            F_SPECIES,
-            thatOffset + j + F_SPECIES.length()
-          )
-          val x2 =
-            that.getFloatVector(F_SPECIES, thatOffset + j + QK_MXFP4 / 2)
-          val x3 = that.getFloatVector(
-            F_SPECIES,
-            thatOffset + j + QK_MXFP4 / 2 + F_SPECIES.length()
-          )
+          val x0 = that.getFloatVector(thatOffset + j)
+          val x1 = that.getFloatVector(thatOffset + j + F_SPECIES.length())
+          val x2 = that.getFloatVector(thatOffset + j + QK_MXFP4 / 2)
+          val x3 = that.getFloatVector(thatOffset + j + QK_MXFP4 / 2 + F_SPECIES.length())
           blockSum += lo0.fma(x0, lo1.mul(x1)).reduceLanes(VectorOperators.ADD)
           blockSum += hi0.fma(x2, hi1.mul(x3)).reduceLanes(VectorOperators.ADD)
         }
@@ -118,14 +111,8 @@ actual object MXFP4FloatTensorMath {
                 p
               ) as FloatVector?)!!
             )
-            val xLo = that.getFloatVector(
-              F_SPECIES,
-              thatOffset + j + p * F_SPECIES.length()
-            )
-            val xHi = that.getFloatVector(
-              F_SPECIES,
-              thatOffset + j + QK_MXFP4 / 2 + p * F_SPECIES.length()
-            )
+            val xLo = that.getFloatVector(thatOffset + j + p * F_SPECIES.length())
+            val xHi = that.getFloatVector(thatOffset + j + QK_MXFP4 / 2 + p * F_SPECIES.length())
             sum = loPart.fma(xLo, sum)
             sum = hiPart.fma(xHi, sum)
           }

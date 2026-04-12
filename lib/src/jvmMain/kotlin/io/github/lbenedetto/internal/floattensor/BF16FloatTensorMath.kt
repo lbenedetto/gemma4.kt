@@ -23,7 +23,7 @@ actual object BF16FloatTensorMath {
     val upperBound: Int = F_SPECIES.loopBound(size)
     var i = 0
     while (i < upperBound) {
-      val thatVector = that.getFloatVector(F_SPECIES, thatOffset + i)
+      val thatVector = that.getFloatVector(thatOffset + i)
       val bfloat16 = ShortVector.fromMemorySegment(
         S_SPECIES_HALF,
         thiz.memorySegment.actual(),
