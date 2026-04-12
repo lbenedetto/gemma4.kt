@@ -3,8 +3,8 @@ package io.github.lbenedetto.internal.floattensor
 import jdk.incubator.vector.VectorShape
 import jdk.incubator.vector.VectorSpecies
 
-actual fun vectorBitSize(): Int =
-  Integer.getInteger("llama.VectorBitSize", VectorShape.preferredShape().vectorBitSize())
+val VECTOR_BIT_SIZE: Int = Integer.getInteger("llama.VectorBitSize", VectorShape.preferredShape().vectorBitSize())
+actual val USE_VECTOR_API: Boolean = VECTOR_BIT_SIZE != 0
 
 object VectorSpeciesConfig {
   val VECTOR_BIT_SIZE: Int = Integer.getInteger("llama.VectorBitSize", VectorShape.preferredShape().vectorBitSize())

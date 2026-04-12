@@ -1,5 +1,3 @@
 package io.github.lbenedetto.internal.floattensor
 
-actual fun vectorBitSize(): Int {
-  TODO("Not yet implemented")
-}
+actual val USE_VECTOR_API: Boolean = true

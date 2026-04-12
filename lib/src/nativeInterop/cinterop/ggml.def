@@ -1,0 +1,2 @@
+headers = ggml_bridge.h
+package = ggml.bridge

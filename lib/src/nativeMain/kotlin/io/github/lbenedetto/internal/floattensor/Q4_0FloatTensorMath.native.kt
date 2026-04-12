@@ -1,5 +1,14 @@
 package io.github.lbenedetto.internal.floattensor
 
+import ggml.bridge.ggml_bridge_dot_q4_0_f32
+import io.github.lbenedetto.internal.floattensor.FloatTensor.Companion.scalarDot
+import io.github.lbenedetto.internal.gguf.GGMLType
+import kotlinx.cinterop.ExperimentalForeignApi
+import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.usePinned
+import kotlin.math.min
+
+@OptIn(ExperimentalForeignApi::class)
 actual object Q4_0FloatTensorMath {
   internal actual fun vectorDot(
     thiz: Q4_0FloatTensor,
@@ -8,6 +17,33 @@ actual object Q4_0FloatTensorMath {
     thatOffset: Int,
     size: Int
   ): Float {
-    TODO("Not yet implemented")
+    var result = 0f
+    var j = 0
+    val blockSize = GGMLType.Q4_0.blockSize
+
+    // Handle alignment to block boundary
+    val alignmentBound = min(size, -thisOffset and (blockSize - 1))
+    if (alignmentBound > 0) {
+      result += scalarDot(thiz, thisOffset, that, thatOffset, alignmentBound)
+      j += alignmentBound
+    }
+
+    // Process full blocks via ggml
+    val fullBlocks = (size - j) / blockSize * blockSize
+    if (fullBlocks > 0) {
+      val byteOffset = (thisOffset + j).toLong() / blockSize * GGMLType.Q4_0.typeSize
+      val quantizedPtr = thiz.memorySegment.rawPointer(byteOffset)
+      that.values.usePinned { pinned ->
+        result += ggml_bridge_dot_q4_0_f32(fullBlocks, quantizedPtr, pinned.addressOf(thatOffset + j))
+      }
+      j += fullBlocks
+    }
+
+    // Handle tail
+    if (j < size) {
+      result += scalarDot(thiz, thisOffset + j, that, thatOffset + j, size - j)
+    }
+
+    return result
   }
 }

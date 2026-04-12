@@ -7,6 +7,9 @@ import platform.posix.*
 @OptIn(ExperimentalForeignApi::class)
 actual class MemorySegment(private val ptr: CPointer<ByteVar>, private val size: Long) {
 
+  /** Returns the raw pointer offset by the given number of bytes, for use with C interop. */
+  internal fun rawPointer(byteOffset: Long = 0): CPointer<ByteVar> = (ptr + byteOffset)!!
+
   actual fun readByte(offset: Long): Byte = ptr[offset.toInt()]
 
   actual fun readShort(offset: Long): Short {
