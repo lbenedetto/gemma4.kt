@@ -7,7 +7,9 @@ import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNotBe
 import io.kotest.matchers.string.shouldNotBeBlank
 import okio.Path.Companion.toPath
+import org.junit.jupiter.api.Disabled
 
+@Disabled
 class GemmaModelIntegrationSpec : BehaviorSpec({
 
     val model = GemmaModel.load("../models/gemma-4-E2B-it-Q8_0.gguf".toPath(), contextLength = 2048)

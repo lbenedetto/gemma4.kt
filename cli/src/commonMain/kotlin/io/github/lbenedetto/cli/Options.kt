@@ -1,13 +1,9 @@
 package io.github.lbenedetto.cli
 
 import io.github.lbenedetto.api.Config.DEFAULT_MAX_TOKENS
-import java.io.PrintStream
-import java.nio.file.Path
-import kotlin.system.exitProcess
 
-@JvmRecord
 data class Options(
-  val modelPath: Path,
+  val modelPath: String,
   val prompt: String?,
   val suffix: String?,
   val systemPrompt: String?,
@@ -28,7 +24,7 @@ data class Options(
       if (!condition) {
         println("ERROR ${message()}")
         println()
-        printUsage(System.out)
+        printUsage()
         exitProcess(-1)
       }
     }
@@ -44,33 +40,33 @@ data class Options(
       }
     }
 
-    fun printUsage(out: PrintStream) {
-      out.println("Usage:  jbang Gemma4.java [options]")
-      out.println()
-      out.println("Options:")
-      out.println("  --model, -m <path>            required, path to .gguf file")
-      out.println("  --interactive, --chat, -i     run in chat mode")
-      out.println("  --instruct                    run in instruct (once) mode, default mode")
-      out.println("  --prompt, -p <string>         input prompt")
-      out.println("  --suffix <string>             suffix for fill-in-the-middle request")
-      out.println("  --system-prompt, -sp <string> system prompt for chat/instruct mode")
-      out.println("  --temperature, -temp <float>  temperature in [0,inf], default 1.0")
-      out.println("  --top-p <float>               p value in top-p (nucleus) sampling in [0,1] default 0.95")
-      out.println("  --seed <long>                 random seed, default System.nanoTime()")
-      out.println("  --max-tokens, -n <int>        number of steps to run for < 0 = limited by context length, default $DEFAULT_MAX_TOKENS")
-      out.println("  --stream <boolean>            print tokens during generation; accepts true|false|on|off, default true")
-      out.println("  --echo <boolean>              print ALL tokens to stderr; accepts true|false|on|off, default false")
-      out.println("  --color <on|off|auto>         colorize thinking output in terminal (default: auto)")
-      out.println("  --think <off|on|inline>       off: disable thoughts, on: thoughts to stderr, inline: thoughts to stdout")
-      out.println()
-      out.println("Interactive commands:")
-      out.println("  /quit, /exit                  exit the chat")
-      out.println("  /context                      show context token usage")
-      out.println()
-      out.println("Examples:")
-      out.println("  jbang Gemma4.java --model gemma-4-E2B-it-Q8_0.gguf --chat")
-      out.println("  jbang Gemma4.java --model gemma-4-E2B-it-Q8_0.gguf --prompt \"Tell me a joke\"")
-      out.println("  jbang Gemma4.java --model gemma-4-E2B-it-Q8_0.gguf --chat --system-prompt \"You are a helpful assistant\"")
+    fun printUsage() {
+      println("Usage:  gemma4 [options]")
+      println()
+      println("Options:")
+      println("  --model, -m <path>            required, path to .gguf file")
+      println("  --interactive, --chat, -i     run in chat mode")
+      println("  --instruct                    run in instruct (once) mode, default mode")
+      println("  --prompt, -p <string>         input prompt")
+      println("  --suffix <string>             suffix for fill-in-the-middle request")
+      println("  --system-prompt, -sp <string> system prompt for chat/instruct mode")
+      println("  --temperature, -temp <float>  temperature in [0,inf], default 1.0")
+      println("  --top-p <float>               p value in top-p (nucleus) sampling in [0,1] default 0.95")
+      println("  --seed <long>                 random seed, default based on monotonic clock")
+      println("  --max-tokens, -n <int>        number of steps to run for < 0 = limited by context length, default $DEFAULT_MAX_TOKENS")
+      println("  --stream <boolean>            print tokens during generation; accepts true|false|on|off, default true")
+      println("  --echo <boolean>              print ALL tokens to stderr; accepts true|false|on|off, default false")
+      println("  --color <on|off|auto>         colorize thinking output in terminal (default: auto)")
+      println("  --think <off|on|inline>       off: disable thoughts, on: thoughts to stderr, inline: thoughts to stdout")
+      println()
+      println("Interactive commands:")
+      println("  /quit, /exit                  exit the chat")
+      println("  /context                      show context token usage")
+      println()
+      println("Examples:")
+      println("  gemma4 --model gemma-4-E2B-it-Q8_0.gguf --chat")
+      println("  gemma4 --model gemma-4-E2B-it-Q8_0.gguf --prompt \"Tell me a joke\"")
+      println("  gemma4 --model gemma-4-E2B-it-Q8_0.gguf --chat --system-prompt \"You are a helpful assistant\"")
     }
 
     fun parseOptions(args: Array<String>): Options {
@@ -79,8 +75,8 @@ data class Options(
       var systemPrompt: String? = null
       var temperature = 1f
       var topp = 0.95f
-      var modelPath: Path? = null
-      var seed = System.nanoTime()
+      var modelPath: String? = null
+      var seed = defaultSeed()
       var maxTokens: Int = DEFAULT_MAX_TOKENS
       var interactive = false
       var stream = true
@@ -97,7 +93,7 @@ data class Options(
           "--interactive", "--chat", "-i" -> interactive = true
           "--instruct" -> interactive = false
           "--help", "-h" -> {
-            printUsage(System.out)
+            printUsage()
             exitProcess(0)
           }
 
@@ -118,7 +114,7 @@ data class Options(
               "--system-prompt", "-sp" -> systemPrompt = nextArg
               "--temperature", "--temp" -> temperature = nextArg.toFloat()
               "--top-p" -> topp = nextArg.toFloat()
-              "--model", "-m" -> modelPath = Path.of(nextArg)
+              "--model", "-m" -> modelPath = nextArg
               "--seed", "-s" -> seed = nextArg.toLong()
               "--max-tokens", "-n" -> maxTokens = nextArg.toInt()
               "--stream" -> stream = parseBooleanOption(optionName, nextArg)

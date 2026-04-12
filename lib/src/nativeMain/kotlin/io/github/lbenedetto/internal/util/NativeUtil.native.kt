@@ -23,5 +23,4 @@ internal actual inline fun assert(condition: Boolean, lazyMessage: () -> Any) {
   }
 }
 
-// TODO: Figure out if this should always be true
 actual fun vectorMathEnabled(): Boolean = true

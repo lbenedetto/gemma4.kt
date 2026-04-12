@@ -49,9 +49,13 @@ actual class MemorySegment(private val ptr: CPointer<ByteVar>, private val size:
       val fd = open(path.toString(), O_RDONLY)
       require(fd >= 0) { "Failed to open $path" }
       try {
-        val ptr = mmap(null, size.toULong(), PROT_READ, MAP_PRIVATE, fd, offset)
+        val pageSize = sysconf(_SC_PAGESIZE)
+        val alignedOffset = offset / pageSize * pageSize
+        val delta = offset - alignedOffset
+        val mappedSize = size + delta
+        val ptr = mmap(null, mappedSize.toULong(), PROT_READ, MAP_PRIVATE, fd, alignedOffset)
         require(ptr != MAP_FAILED) { "mmap failed for $path at offset $offset size $size" }
-        return MemorySegment(ptr!!.reinterpret(), size)
+        return MemorySegment((ptr!!.reinterpret<ByteVar>() + delta)!!, size)
       } finally {
         close(fd)
       }

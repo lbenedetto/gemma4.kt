@@ -4,6 +4,7 @@ import io.github.lbenedetto.api.Gemma
 import io.github.lbenedetto.api.GemmaModel
 import io.github.lbenedetto.api.GenerationConfig
 import io.github.lbenedetto.api.GenerationResult
+import okio.Path.Companion.toPath
 
 object Gemma4 {
   private const val ANSI_GREY = "\u001b[90m"
@@ -11,24 +12,23 @@ object Gemma4 {
 
   fun supportsAnsiColors(colorMode: String) = when (colorMode) {
     "on" -> true
-    "auto" -> System.getenv("NO_COLOR") == null && System.getenv("TERM")?.lowercase() != "dumb"
+    "auto" -> getenv("NO_COLOR") == null && getenv("TERM")?.lowercase() != "dumb"
     else -> false
   }
 
   private fun printThinking(result: GenerationResult, options: Options) {
     val thinking = result.thinking?.takeIf { it.isNotEmpty() } ?: return
-    val out = if (options.thinkInline) System.out else System.err
+    val useStderr = !options.thinkInline
+    val doPrintln: (String) -> Unit = if (useStderr) ::printlnStderr else ::println
     val grey = if (options.colors) ANSI_GREY else ""
     val reset = if (options.colors) ANSI_RESET else ""
-    out.run {
-      println("""
-        $grey
-        [Start thinking]
-        $thinking
-        [End thinking]
-        $reset
-      """.trimIndent())
-    }
+    doPrintln("""
+      $grey
+      [Start thinking]
+      $thinking
+      [End thinking]
+      $reset
+    """.trimIndent())
   }
 
   private fun GenerationConfig.applyOptions(options: Options) {
@@ -41,19 +41,21 @@ object Gemma4 {
     if (options.stream) {
       onToken = { piece -> print(piece) }
       if (options.think) {
-        val thoughtOut = if (options.thinkInline) System.out else System.err
+        val useStderr = !options.thinkInline
+        val doPrint: (String) -> Unit = if (useStderr) ::printStderr else ::print
+        val doPrintln: (String) -> Unit = if (useStderr) ::printlnStderr else ::println
         var emitted = false
         onThinkingStart = {
           emitted = false
-          if (options.colors) thoughtOut.print(ANSI_GREY)
-          thoughtOut.println("[Start thinking]")
+          if (options.colors) doPrint(ANSI_GREY)
+          doPrintln("[Start thinking]")
         }
-        onThinkingToken = { piece -> thoughtOut.print(piece); emitted = true }
+        onThinkingToken = { piece -> doPrint(piece); emitted = true }
         onThinkingEnd = {
-          if (emitted) thoughtOut.println()
-          thoughtOut.println("[End thinking]")
-          if (options.colors) thoughtOut.print(ANSI_RESET)
-          thoughtOut.println()
+          if (emitted) doPrintln("")
+          doPrintln("[End thinking]")
+          if (options.colors) doPrint(ANSI_RESET)
+          doPrintln("")
         }
       }
     }
@@ -64,7 +66,7 @@ object Gemma4 {
 
     while (true) {
       print("> ")
-      System.out.flush()
+      flushStdout()
       val userText = readlnOrNull() ?: break
 
       when (userText) {
@@ -79,7 +81,7 @@ object Gemma4 {
       if (!options.stream) printThinking(result, options)
       if (options.stream) println() else println(result.text)
       if (chat.contextRemaining <= 0) {
-        System.err.println("Ran out of context length...")
+        printlnStderr("Ran out of context length...")
         break
       }
     }
@@ -92,15 +94,14 @@ object Gemma4 {
     if (!options.stream) printThinking(result, options)
     if (options.stream) println() else println(result.text)
   }
+}
 
-  @JvmStatic
-  fun main(args: Array<String>) {
-    val options = Options.parseOptions(args)
-    val model = GemmaModel.load(options.modelPath, options.maxTokens)
-    if (options.interactive) {
-      runInteractive(model, options)
-    } else {
-      runInstructOnce(model, options)
-    }
+fun main(args: Array<String>) {
+  val options = Options.parseOptions(args)
+  val model = GemmaModel.load(options.modelPath.toPath(), options.maxTokens)
+  if (options.interactive) {
+    Gemma4.runInteractive(model, options)
+  } else {
+    Gemma4.runInstructOnce(model, options)
   }
 }

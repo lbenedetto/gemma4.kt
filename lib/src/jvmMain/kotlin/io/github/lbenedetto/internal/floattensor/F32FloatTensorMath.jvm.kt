@@ -6,6 +6,7 @@ import jdk.incubator.vector.VectorOperators
 import java.nio.ByteOrder
 
 actual object F32FloatTensorMath {
+  @JvmStatic
   internal actual fun vectorDot(
     thiz: F32FloatTensor,
     thisOffset: Int,

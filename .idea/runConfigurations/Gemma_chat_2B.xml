@@ -1,11 +1,28 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="Gemma chat 2B" type="JetRunConfigurationType">
-    <option name="MAIN_CLASS_NAME" value="io.github.lbenedetto.cli.Gemma4" />
-    <module name="gemma4.kt.cli.main" />
-    <option name="PROGRAM_PARAMETERS" value="--model &quot;models/gemma-4-E2B-it-Q8_0.gguf&quot; --chat" />
-    <shortenClasspath name="NONE" />
-    <method v="2">
-      <option name="Make" enabled="true" />
-    </method>
+  <configuration default="false" name="Gemma chat 2B" type="GradleRunConfiguration" factoryName="Gradle">
+    <ExternalSystemSettings>
+      <option name="executionName" />
+      <option name="externalProjectPath" value="$PROJECT_DIR$/cli" />
+      <option name="externalSystemIdString" value="GRADLE" />
+      <option name="scriptParameters" value="-DmainClass=io.github.lbenedetto.cli.Gemma4Kt --quiet" />
+      <option name="taskDescriptions">
+        <list />
+      </option>
+      <option name="taskNames">
+        <list>
+          <option value="jvmRun" />
+          <option value="--args='--model ../models/gemma-4-E2B-it-Q8_0.gguf --chat'" />
+        </list>
+      </option>
+      <option name="vmOptions" />
+    </ExternalSystemSettings>
+    <ExternalSystemDebugServerProcess>false</ExternalSystemDebugServerProcess>
+    <ExternalSystemReattachDebugProcess>true</ExternalSystemReattachDebugProcess>
+    <ExternalSystemDebugDisabled>false</ExternalSystemDebugDisabled>
+    <DebugAllEnabled>false</DebugAllEnabled>
+    <RunAsTest>false</RunAsTest>
+    <GradleProfilingDisabled>false</GradleProfilingDisabled>
+    <GradleCoverageDisabled>false</GradleCoverageDisabled>
+    <method v="2" />
   </configuration>
 </component>
