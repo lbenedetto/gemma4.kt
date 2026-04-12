@@ -1,8 +1,6 @@
 package io.github.lbenedetto.internal.floattensor
 
-import io.github.lbenedetto.internal.data.MemorySegment
 import io.github.lbenedetto.internal.floattensor.VectorSpeciesConfig.F_SPECIES
-import io.github.lbenedetto.internal.util.vectorMathEnabled
 import jdk.incubator.vector.FloatVector
 import jdk.incubator.vector.VectorOperators
 import java.nio.ByteOrder
@@ -37,17 +35,4 @@ actual object F32FloatTensorMath {
     }
     return result
   }
-
-  fun getFloatVector(memorySegment: MemorySegment, offset: Int): FloatVector {
-    if (!vectorMathEnabled()) {
-      throw UnsupportedOperationException()
-    }
-    return FloatVector.fromMemorySegment(
-      F_SPECIES!!,
-      memorySegment.actual(),
-      offset.toLong() * Float.SIZE_BYTES,
-      ByteOrder.LITTLE_ENDIAN
-    )
-  }
-
 }
