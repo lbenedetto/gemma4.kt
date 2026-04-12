@@ -92,6 +92,9 @@ kotlin {
         }
         nativeMain {
             kotlin.srcDir("src/nativeMain/kotlin")
+            dependencies {
+                implementation(libs.coroutines.core)
+            }
         }
         jvmMain {
             kotlin.srcDir("src/jvmMain/kotlin")
