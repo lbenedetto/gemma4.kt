@@ -10,21 +10,23 @@ actual class MemorySegment(private val ptr: CPointer<ByteVar>, private val size:
   /** Returns the raw pointer offset by the given number of bytes, for use with C interop. */
   internal fun rawPointer(byteOffset: Long = 0): CPointer<ByteVar> = (ptr + byteOffset)!!
 
-  actual fun readByte(offset: Long): Byte = ptr[offset.toInt()]
+  actual fun readByte(offset: Long): Byte = (ptr + offset)!![0]
 
   actual fun readShort(offset: Long): Short {
-    val b0 = ptr[offset.toInt()].toInt() and 0xFF
-    val b1 = ptr[(offset + 1).toInt()].toInt() and 0xFF
+    val p = (ptr + offset)!!
+    val b0 = p[0].toInt() and 0xFF
+    val b1 = p[1].toInt() and 0xFF
     return ((b1 shl 8) or b0).toShort()
   }
 
   actual fun readFloat16(offset: Long): Float = float16ToFloat(readShort(offset))
 
   actual fun readFloat(offset: Long): Float {
-    val b0 = ptr[offset.toInt()].toInt() and 0xFF
-    val b1 = ptr[(offset + 1).toInt()].toInt() and 0xFF
-    val b2 = ptr[(offset + 2).toInt()].toInt() and 0xFF
-    val b3 = ptr[(offset + 3).toInt()].toInt() and 0xFF
+    val p = (ptr + offset)!!
+    val b0 = p[0].toInt() and 0xFF
+    val b1 = p[1].toInt() and 0xFF
+    val b2 = p[2].toInt() and 0xFF
+    val b3 = p[3].toInt() and 0xFF
     return Float.fromBits((b3 shl 24) or (b2 shl 16) or (b1 shl 8) or b0)
   }
 
@@ -34,12 +36,7 @@ actual class MemorySegment(private val ptr: CPointer<ByteVar>, private val size:
   actual fun asFloatBuffer(): FloatBuffer {
     val count = (size / 4).toInt()
     val arr = FloatArray(count) { i ->
-      val base = i.toLong() * 4
-      val b0 = ptr[base.toInt()].toInt() and 0xFF
-      val b1 = ptr[(base + 1).toInt()].toInt() and 0xFF
-      val b2 = ptr[(base + 2).toInt()].toInt() and 0xFF
-      val b3 = ptr[(base + 3).toInt()].toInt() and 0xFF
-      Float.fromBits((b3 shl 24) or (b2 shl 16) or (b1 shl 8) or b0)
+      readFloat(i.toLong() * 4)
     }
     return FloatBuffer(arr)
   }
