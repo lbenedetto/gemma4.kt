@@ -1,14 +1,9 @@
 [versions]
-kotlin     = "2.3.20"
-kotest     = "6.1.11"
-coroutines = "1.10.2"
-okio       = "3.17.0"
+kotest = "6.1.11"
 
 [libraries]
-kotest-runner-junit5   = { module = "io.kotest:kotest-runner-junit5",           version.ref = "kotest" }
-kotest-assertions-core = { module = "io.kotest:kotest-assertions-core",         version.ref = "kotest" }
-coroutines-core        = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
-okio                   = { module = "com.squareup.okio:okio",                   version.ref = "okio"   }
+kotest-runner-junit5   = { module = "io.kotest:kotest-runner-junit5",   version.ref = "kotest" }
+kotest-assertions-core = { module = "io.kotest:kotest-assertions-core", version.ref = "kotest" }
 
 [plugins]
-kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
+kotlin-jvm  = { id = "org.jetbrains.kotlin.jvm", version = "2.3.20" }
