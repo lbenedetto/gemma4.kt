@@ -1,7 +1,5 @@
 package io.github.lbenedetto.internal.gguf
 
-import io.github.lbenedetto.internal.data.FloatBuffer
-import io.github.lbenedetto.internal.data.wrapWithFloatBuffer
 import io.github.lbenedetto.internal.floattensor.FloatTensor
 import io.github.lbenedetto.internal.floattensor.FloatTensorFactory
 import io.github.lbenedetto.internal.model.Llama
@@ -11,7 +9,8 @@ import io.github.lbenedetto.internal.model.RoPE
 import io.github.lbenedetto.internal.tokenizer.GemmaTokenizer
 import io.github.lbenedetto.internal.tokenizer.Vocabulary
 import io.github.lbenedetto.internal.util.Timer
-import okio.Path
+import java.nio.FloatBuffer
+import java.nio.file.Path
 
 internal object ModelLoader {
   private fun loadVocabulary(metadata: Map<String, Any>): Vocabulary {
@@ -240,10 +239,10 @@ internal object ModelLoader {
       loadArrayOfFloatBuffer(config.numberOfLayers) { tensorEntries["blk.$it.post_ffw_norm.weight"]!! },
       tensorEntries["output_norm.weight"]!!.toFloatBuffer(),
       layerOutputScale,
-      wrapWithFloatBuffer(ropeFreqsFull.first),
-      wrapWithFloatBuffer(ropeFreqsFull.second),
-      wrapWithFloatBuffer(ropeFreqsSWA.first),
-      wrapWithFloatBuffer(ropeFreqsSWA.second),
+      FloatBuffer.wrap(ropeFreqsFull.first),
+      FloatBuffer.wrap(ropeFreqsFull.second),
+      FloatBuffer.wrap(ropeFreqsSWA.first),
+      FloatBuffer.wrap(ropeFreqsSWA.second),
       if (tensorEntries.containsKey("output.weight"))
         loadQuantized(tensorEntries["output.weight"]!!)
       else

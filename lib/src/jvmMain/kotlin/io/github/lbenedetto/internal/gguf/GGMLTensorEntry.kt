@@ -1,7 +1,8 @@
 package io.github.lbenedetto.internal.gguf
 
-import io.github.lbenedetto.internal.data.FloatBuffer
-import io.github.lbenedetto.internal.data.MemorySegment
+import java.lang.foreign.MemorySegment
+import java.nio.ByteOrder
+import java.nio.FloatBuffer
 
 internal data class GGMLTensorEntry(
   val ggmlType: GGMLType,
@@ -10,7 +11,9 @@ internal data class GGMLTensorEntry(
 ) {
   fun toFloatBuffer(): FloatBuffer {
     return when (ggmlType) {
-      GGMLType.F32 -> memorySegment.asFloatBuffer()
+      GGMLType.F32 -> memorySegment.asByteBuffer()
+        .order(ByteOrder.LITTLE_ENDIAN)
+        .asFloatBuffer()
       else -> throw UnsupportedOperationException("Conversion to $ggmlType")
     }
   }

@@ -11,9 +11,9 @@ import jdk.incubator.vector.VectorOperators
 import java.nio.ByteOrder
 import kotlin.math.min
 
-actual object MXFP4FloatTensorMath {
+object MXFP4FloatTensorMath {
 
-  internal actual fun vectorDot(
+  internal fun vectorDot(
     thiz: MXFP4FloatTensor,
     thisOffset: Int,
     that: ArrayFloatTensor,
@@ -38,7 +38,7 @@ actual object MXFP4FloatTensorMath {
 
       val packed = ByteVector.fromMemorySegment(
         ByteVector.SPECIES_128,
-        thiz.memorySegment.actual(),
+        thiz.memorySegment,
         blockOffset + Byte.SIZE_BYTES,
         ByteOrder.LITTLE_ENDIAN
       )

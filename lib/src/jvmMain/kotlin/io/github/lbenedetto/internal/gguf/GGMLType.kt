@@ -1,7 +1,9 @@
 package io.github.lbenedetto.internal.gguf
 
-import io.github.lbenedetto.internal.floattensor.Float16
-import io.github.lbenedetto.internal.util.assert
+import jdk.vm.ci.code.CodeUtil.isPowerOf2
+
+io.github.lbenedetto.internal.util.assert
+import jdk.vm.ci.code.CodeUtil.isPowerOf2
 
 const val QK_K: Int = 256
 const val QK_MXFP4: Int = 32

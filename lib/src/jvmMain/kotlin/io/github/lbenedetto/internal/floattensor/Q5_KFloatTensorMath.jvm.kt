@@ -10,8 +10,8 @@ import jdk.incubator.vector.VectorOperators
 import java.nio.ByteOrder
 import kotlin.math.min
 
-actual object Q5_KFloatTensorMath {
-  internal actual fun vectorDot(
+object Q5_KFloatTensorMath {
+  internal fun vectorDot(
     thiz: Q5_KFloatTensor,
     thisOffset: Int,
     that: ArrayFloatTensor,
@@ -40,9 +40,9 @@ actual object Q5_KFloatTensorMath {
       val qhOff = blockOffset + 16
       val qsOff = blockOffset + 48
       val qh0 =
-        ByteVector.fromMemorySegment(ByteVector.SPECIES_128, thiz.memorySegment.actual(), qhOff, ByteOrder.LITTLE_ENDIAN)
+        ByteVector.fromMemorySegment(ByteVector.SPECIES_128, thiz.memorySegment, qhOff, ByteOrder.LITTLE_ENDIAN)
       val qh1 =
-        ByteVector.fromMemorySegment(ByteVector.SPECIES_128, thiz.memorySegment.actual(), qhOff + 16, ByteOrder.LITTLE_ENDIAN)
+        ByteVector.fromMemorySegment(ByteVector.SPECIES_128, thiz.memorySegment, qhOff + 16, ByteOrder.LITTLE_ENDIAN)
 
       for (g in 0..3) {
         val loSubBlock = g * 2
@@ -66,7 +66,7 @@ actual object Q5_KFloatTensorMath {
           val hiBase = thatOffset + j + g * 64 + 32 + c * 16
 
           val wBytes = ByteVector.fromMemorySegment(
-            ByteVector.SPECIES_128, thiz.memorySegment.actual(),
+            ByteVector.SPECIES_128, thiz.memorySegment,
             groupQsOff + c * 16L, ByteOrder.LITTLE_ENDIAN
           )
           var loQ = wBytes.and(0xF.toByte())

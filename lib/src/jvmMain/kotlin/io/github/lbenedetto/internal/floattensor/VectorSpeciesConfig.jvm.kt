@@ -4,7 +4,7 @@ import jdk.incubator.vector.VectorShape
 import jdk.incubator.vector.VectorSpecies
 
 val VECTOR_BIT_SIZE: Int = Integer.getInteger("llama.VectorBitSize", VectorShape.preferredShape().vectorBitSize())
-actual val USE_VECTOR_API: Boolean = VECTOR_BIT_SIZE != 0
+val USE_VECTOR_API: Boolean = VECTOR_BIT_SIZE != 0
 
 object VectorSpeciesConfig {
   val VECTOR_BIT_SIZE: Int = Integer.getInteger("llama.VectorBitSize", VectorShape.preferredShape().vectorBitSize())

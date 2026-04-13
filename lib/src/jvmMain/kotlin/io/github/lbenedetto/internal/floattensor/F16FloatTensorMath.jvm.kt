@@ -9,8 +9,8 @@ import jdk.incubator.vector.ShortVector
 import jdk.incubator.vector.VectorOperators
 import java.nio.ByteOrder
 
-actual object F16FloatTensorMath {
-  internal actual fun vectorDot(
+object F16FloatTensorMath {
+  internal fun vectorDot(
     thiz: F16FloatTensor,
     thisOffset: Int,
     that: ArrayFloatTensor,
@@ -28,7 +28,7 @@ actual object F16FloatTensorMath {
       val thatVector = that.getFloatVector(thatOffset + i)
       val bits16 = ShortVector.fromMemorySegment(
         S_SPECIES_HALF,
-        thiz.memorySegment.actual(),
+        thiz.memorySegment,
         (thisOffset + i) * 2L,
         ByteOrder.LITTLE_ENDIAN
       )

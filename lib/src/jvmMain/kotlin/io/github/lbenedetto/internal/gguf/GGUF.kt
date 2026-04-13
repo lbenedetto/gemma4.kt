@@ -1,13 +1,14 @@
 package io.github.lbenedetto.internal.gguf
 
-import io.github.lbenedetto.internal.data.MemorySegment
 import io.github.lbenedetto.internal.floattensor.FloatTensor
 import io.github.lbenedetto.internal.util.Math
 import io.github.lbenedetto.internal.util.Timer
 import io.github.lbenedetto.internal.util.assert
 import io.github.lbenedetto.internal.util.toCodePoints
-import okio.*
 import okio.internal.commonToUtf8String
+import java.lang.foreign.MemorySegment
+import java.nio.file.FileSystem
+import java.nio.file.Path
 
 internal class GGUF private constructor(reader: GgufSource) {
   private var tensorCount = 0 // uint64_t

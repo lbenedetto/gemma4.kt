@@ -9,8 +9,8 @@ import jdk.incubator.vector.VectorOperators
 import java.nio.ByteOrder
 import kotlin.math.min
 
-actual object Q4_1FloatTensorMath {
-  internal actual fun vectorDot(
+object Q4_1FloatTensorMath {
+  internal fun vectorDot(
     thiz: Q4_1FloatTensor,
     thisOffset: Int,
     that: ArrayFloatTensor,
@@ -38,7 +38,7 @@ actual object Q4_1FloatTensorMath {
       val wMin = FloatVector.broadcast(F_SPECIES, minValue)
       val wBytes = ByteVector.fromMemorySegment(
         ByteVector.SPECIES_128,
-        thiz.memorySegment.actual(),
+        thiz.memorySegment,
         blockOffset + 2 * Float16.BYTES,
         ByteOrder.LITTLE_ENDIAN
       )

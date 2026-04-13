@@ -6,9 +6,9 @@ import io.github.lbenedetto.internal.util.vectorMathEnabled
 import jdk.incubator.vector.FloatVector
 import jdk.incubator.vector.VectorOperators
 
-actual object ArrayFloatTensorMath {
+object ArrayFloatTensorMath {
 
-  internal actual fun vectorDot(
+  internal fun vectorDot(
     thiz: ArrayFloatTensor,
     thisOffset: Int,
     that: ArrayFloatTensor,

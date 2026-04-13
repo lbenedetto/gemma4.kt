@@ -1,6 +1,5 @@
 package io.github.lbenedetto.internal.floattensor
 
-import io.github.lbenedetto.internal.util.Math
 import io.github.lbenedetto.internal.util.assert
 import kotlin.math.exp
 import kotlin.math.max
@@ -13,22 +12,16 @@ interface FloatTensor {
   fun setFloat(index: Int, value: Float)
 
   fun dot(thisOffset: Int, that: FloatTensor, thatOffset: Int, size: Int): Float {
-    return DebugTimer.measure("dot[${this::class.simpleName}]") {
-      scalarDot(this, thisOffset, that, thatOffset, size)
-    }
+    return scalarDot(this, thisOffset, that, thatOffset, size)
   }
 
   fun matmul(that: FloatTensor, out: FloatTensor, dim0: Int, dim1: Int) {
-    DebugTimer.measure("matmul[${this::class.simpleName}]") {
-      parallelFor(0, dim0) { out.setFloat(it, dot(it * dim1, that, 0, dim1)) }
-    }
+    parallelFor(0, dim0) { out.setFloat(it, dot(it * dim1, that, 0, dim1)) }
   }
 
   // matmul with offset into this tensor (for expert weight slicing in 3D tensors)
   fun matmul(that: FloatTensor, out: FloatTensor, dim0: Int, dim1: Int, thisOffset: Int) {
-    DebugTimer.measure("matmul[${this::class.simpleName}]") {
-      parallelFor(0, dim0) { out.setFloat(it, dot(thisOffset + it * dim1, that, 0, dim1)) }
-    }
+    parallelFor(0, dim0) { out.setFloat(it, dot(thisOffset + it * dim1, that, 0, dim1)) }
   }
 
   fun reduce(thisOffset: Int, size: Int, seed: Float, reduce: (Float, Float) -> Float): Float {

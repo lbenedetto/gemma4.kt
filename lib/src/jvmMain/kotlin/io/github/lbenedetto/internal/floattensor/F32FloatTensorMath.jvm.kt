@@ -5,9 +5,9 @@ import jdk.incubator.vector.FloatVector
 import jdk.incubator.vector.VectorOperators
 import java.nio.ByteOrder
 
-actual object F32FloatTensorMath {
+object F32FloatTensorMath {
   @JvmStatic
-  internal actual fun vectorDot(
+  internal fun vectorDot(
     thiz: F32FloatTensor,
     thisOffset: Int,
     that: ArrayFloatTensor,
@@ -21,7 +21,7 @@ actual object F32FloatTensorMath {
       while (i < upperBound) {
         val a = FloatVector.fromMemorySegment(
           F_SPECIES,
-          thiz.memorySegment.actual(),
+          thiz.memorySegment,
           (thisOffset + i).toLong() * Float.SIZE_BYTES,
           ByteOrder.LITTLE_ENDIAN
         )

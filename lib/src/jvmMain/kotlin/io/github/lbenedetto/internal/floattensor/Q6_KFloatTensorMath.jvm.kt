@@ -11,8 +11,8 @@ import jdk.incubator.vector.VectorOperators
 import java.nio.ByteOrder
 import kotlin.math.min
 
-actual object Q6_KFloatTensorMath {
-  internal actual fun vectorDot(
+object Q6_KFloatTensorMath {
+  internal fun vectorDot(
     thiz: Q6_KFloatTensor,
     thisOffset: Int,
     that: ArrayFloatTensor,
@@ -52,15 +52,15 @@ actual object Q6_KFloatTensorMath {
         val base = thatOffset + j + h * 128
         for (c in 0..1) {
           val qlA = ByteVector.fromMemorySegment(
-            ByteVector.SPECIES_128, thiz.memorySegment.actual(),
+            ByteVector.SPECIES_128, thiz.memorySegment,
             qlBase + c * 16L, ByteOrder.LITTLE_ENDIAN
           )
           val qlB = ByteVector.fromMemorySegment(
-            ByteVector.SPECIES_128, thiz.memorySegment.actual(),
+            ByteVector.SPECIES_128, thiz.memorySegment,
             qlBase + 32 + c * 16L, ByteOrder.LITTLE_ENDIAN
           )
           val qhV = ByteVector.fromMemorySegment(
-            ByteVector.SPECIES_128, thiz.memorySegment.actual(),
+            ByteVector.SPECIES_128, thiz.memorySegment,
             qhBase + c * 16L, ByteOrder.LITTLE_ENDIAN
           )
 

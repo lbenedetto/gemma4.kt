@@ -9,8 +9,8 @@ import jdk.incubator.vector.FloatVector
 import jdk.incubator.vector.VectorOperators
 import kotlin.math.min
 
-actual object Q5_1FloatTensorMath {
-  internal actual fun vectorDot(
+object Q5_1FloatTensorMath {
+  internal fun vectorDot(
     thiz: Q5_1FloatTensor,
     thisOffset: Int,
     that: ArrayFloatTensor,
