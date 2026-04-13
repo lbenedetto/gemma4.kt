@@ -1,4 +1,4 @@
-package io.github.lbenedetto.internal.model
+package io.github.lbenedetto.internal.gguf
 
 import io.github.lbenedetto.internal.util.assert
 import kotlin.math.cos

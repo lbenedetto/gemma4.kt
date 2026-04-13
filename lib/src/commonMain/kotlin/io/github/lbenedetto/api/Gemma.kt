@@ -1,7 +1,8 @@
 package io.github.lbenedetto.api
 
-import io.github.lbenedetto.internal.model.*
-import io.github.lbenedetto.internal.sampler.Sampler
+import io.github.lbenedetto.internal.model.GemmaChatFormat
+import io.github.lbenedetto.internal.model.Message
+import io.github.lbenedetto.internal.model.Role
 
 /**
  * A loaded Gemma model, ready for text generation.
@@ -28,7 +29,7 @@ import io.github.lbenedetto.internal.sampler.Sampler
  * println(model.fillInMiddle(prefix = "fun greet(name: String) = ", suffix = "").text)
  * ```
  */
-class Gemma internal constructor(private val model: Llama) {
+class Gemma internal constructor(private val engine: InferenceEngine) {
   /**
    * Generate a response to [prompt].
    *
@@ -61,16 +62,15 @@ class Gemma internal constructor(private val model: Llama) {
     buildPromptTokens: (GenerationConfig, GemmaChatFormat) -> List<Int>,
   ): GenerationResult {
     val config = GenerationConfig().apply(configure)
-    val chatFormat = GemmaChatFormat(model.tokenizer)
-    val state = model.createNewState()
-    val sampler = Sampler.build(model.configuration.vocabularySize, config)
+    val chatFormat = GemmaChatFormat(engine.tokenizer)
+    val state = engine.createState()
     val promptTokens = buildPromptTokens(config, chatFormat).toList()
     val stopTokens = chatFormat.stopTokens
-    val (callback, buildResult) = tokenAccumulator(model, config)
+    val (callback, buildResult) = tokenAccumulator(engine, config)
 
-    val responseTokens = Llama.generateTokens(
-      model, state, 0, promptTokens, stopTokens,
-      config.maxTokens, sampler, echo = false, color = false, callback
+    val responseTokens = engine.generateTokens(
+      state, 0, promptTokens, stopTokens,
+      config.maxTokens, config, callback
     )
     if (responseTokens.isNotEmpty() && stopTokens.contains(responseTokens.last())) {
       responseTokens.removeLast()
@@ -82,10 +82,10 @@ class Gemma internal constructor(private val model: Llama) {
   /**
    * Create a new multi-turn [ChatSession] with the given configuration.
    *
-   * The session maintains a [LlamaState] across turns so the model retains
+   * The session maintains inference state across turns so the model retains
    * full context of the conversation. Call [ChatSession.reset] to start over.
    */
   fun chat(configure: GenerationConfig.() -> Unit = {}): ChatSession {
-    return ChatSession(model, GenerationConfig().apply(configure))
+    return ChatSession(engine, GenerationConfig().apply(configure))
   }
 }

@@ -1,7 +1,7 @@
 package io.github.lbenedetto.internal.model
 
-import io.github.lbenedetto.internal.data.FloatBuffer
 import io.github.lbenedetto.internal.floattensor.FloatTensor
+import java.nio.FloatBuffer
 
 internal class LlamaWeights(
   val tokenEmbeddingTable: FloatTensor,

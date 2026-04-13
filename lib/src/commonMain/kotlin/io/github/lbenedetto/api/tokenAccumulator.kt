@@ -1,6 +1,5 @@
 package io.github.lbenedetto.api
 
-import io.github.lbenedetto.internal.model.Llama
 
 /**
  * Builds a token callback and a deferred result supplier that work together.
@@ -10,10 +9,10 @@ import io.github.lbenedetto.internal.model.Llama
  * The supplier returns the final [GenerationResult] once generation is complete.
  */
 internal fun tokenAccumulator(
-  model: Llama,
+  engine: InferenceEngine,
   config: GenerationConfig,
 ): Pair<(Int) -> Unit, () -> GenerationResult> {
-  val tokenizer = model.tokenizer
+  val tokenizer = engine.tokenizer
   val channelOpen = tokenizer.specialTokens["<|channel>"]
   val channelClose = tokenizer.specialTokens["<channel|>"]
   val hasThinkingSupport = channelOpen != null && channelClose != null

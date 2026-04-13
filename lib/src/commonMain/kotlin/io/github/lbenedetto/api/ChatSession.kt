@@ -1,20 +1,21 @@
 package io.github.lbenedetto.api
 
-import io.github.lbenedetto.internal.model.*
-import io.github.lbenedetto.internal.sampler.Sampler
+import io.github.lbenedetto.internal.model.GemmaChatFormat
+import io.github.lbenedetto.internal.model.Message
+import io.github.lbenedetto.internal.model.Role
 
 /**
  * A stateful multi-turn conversation. Obtain one from [io.github.lbenedetto.api.GemmaModel.chat].
  *
- * The session owns its [io.github.lbenedetto.internal.model.LlamaState] and accumulates conversation tokens across
+ * The session owns its [InferenceState] and accumulates conversation tokens across
  * calls to [send], so the model always has full context of the prior exchange.
  */
 class ChatSession internal constructor(
-  private val model: Llama,
+  private val engine: InferenceEngine,
   private val config: GenerationConfig,
 ) {
-    private var state: LlamaState? = null
-    private val chatFormat = GemmaChatFormat(model.tokenizer)
+    private var state: InferenceState? = null
+    private val chatFormat = GemmaChatFormat(engine.tokenizer)
     private val conversationTokens = mutableListOf<Int>()
     private var startPosition = 0
 
@@ -34,20 +35,19 @@ class ChatSession internal constructor(
 
     /** Send [message] and return the model's response. */
     fun send(message: String): GenerationResult {
-        if (state == null) state = model.createNewState()
+        if (state == null) state = engine.createState()
 
         conversationTokens.addAll(chatFormat.encodeMessage(Message(Role.USER, message)))
         conversationTokens.addAll(chatFormat.encodeHeader(Message(Role.MODEL, "")))
 
-        val sampler = Sampler.build(model.configuration.vocabularySize, config)
         val stopTokens = chatFormat.stopTokens
-        val (callback, buildResult) = tokenAccumulator(model, config)
+        val (callback, buildResult) = tokenAccumulator(engine, config)
 
-        val responseTokens = Llama.generateTokens(
-            model, state!!, startPosition,
+        val responseTokens = engine.generateTokens(
+            state!!, startPosition,
             conversationTokens.subList(startPosition, conversationTokens.size),
-            stopTokens, config.maxTokens, sampler,
-            false, false, callback
+            stopTokens, config.maxTokens, config,
+            callback
         )
 
         // Separate stop token from response body (same bookkeeping as the CLI)

@@ -1,7 +1,6 @@
 package io.github.lbenedetto.internal.sampler
 
-import io.github.lbenedetto.internal.floattensor.FloatTensor
-import io.github.lbenedetto.internal.util.Math
+import io.github.lbenedetto.internal.floattensor.FloatTensorimport io.github.lbenedetto.internal.util.Math
 import kotlin.random.Random
 
 internal class ToppSampler(

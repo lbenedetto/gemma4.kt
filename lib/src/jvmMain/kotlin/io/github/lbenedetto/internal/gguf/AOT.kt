@@ -2,7 +2,6 @@ package io.github.lbenedetto.internal.gguf
 
 import io.github.lbenedetto.api.Config.DEFAULT_MAX_TOKENS
 import io.github.lbenedetto.internal.model.Llama
-import io.github.lbenedetto.internal.model.RoPE
 import io.github.lbenedetto.internal.util.Timer
 import okio.FileSystem
 import okio.Path

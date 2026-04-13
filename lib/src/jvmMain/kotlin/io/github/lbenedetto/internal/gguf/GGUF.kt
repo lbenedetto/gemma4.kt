@@ -6,8 +6,9 @@ import io.github.lbenedetto.internal.util.Timer
 import io.github.lbenedetto.internal.util.assert
 import io.github.lbenedetto.internal.util.toCodePoints
 import okio.internal.commonToUtf8String
-import java.lang.foreign.MemorySegment
-import java.nio.file.FileSystem
+import java.io.IOException
+import java.lang.foreign.Arena
+import java.nio.channels.FileChannel
 import java.nio.file.Path
 
 internal class GGUF private constructor(reader: GgufSource) {
@@ -146,30 +147,40 @@ internal class GGUF private constructor(reader: GgufSource) {
   companion object {
     private const val GGUF_MAGIC = 0x46554747
     private const val DEFAULT_ALIGNMENT = 32 // must be a power of 2
+    private const val PARSE_BUFFER_SIZE = 1 shl 20
     private val SUPPORTED_GGUF_VERSIONS = listOf(2, 3)
 
     fun loadTensors(
-      path: Path,
+      fileChannel: FileChannel,
       tensorDataOffset: Long,
       tensorInfos: Map<String, GGUFTensorInfo>
     ): Map<String, GGMLTensorEntry> {
-      val fileSize = FileSystem.SYSTEM.metadata(path).size!!
-      val tensorData = MemorySegment.mmap(path, tensorDataOffset, fileSize - tensorDataOffset)
-      val tensorEntries = HashMap<String, GGMLTensorEntry>(tensorInfos.size)
+      val arena = Arena.global()
+      val tensorData =
+        fileChannel.map(FileChannel.MapMode.READ_ONLY, tensorDataOffset, fileChannel.size() - tensorDataOffset, arena)
+      val tensorEntries = HashMap.newHashMap<String, GGMLTensorEntry>(tensorInfos.size)
       for (entry in tensorInfos.entries) {
         val ti = entry.value
         val numberOfElements: Long = FloatTensor.numberOfElementsLong(*ti.dimensions)
         val sizeInBytes = ti.ggmlType.byteSizeFor(numberOfElements)
-        tensorEntries[ti.name] = GGMLTensorEntry(ti.ggmlType, ti.dimensions, tensorData.slice(ti.offset, sizeInBytes))
+        val memorySegment = tensorData.asSlice(ti.offset, sizeInBytes)
+        tensorEntries[ti.name] = GGMLTensorEntry(ti.ggmlType, ti.dimensions, memorySegment)
       }
       return tensorEntries
     }
 
-    fun loadModel(path: Path): GGUF {
-      Timer.log("Parse $path").use {
-        return FileSystem.SYSTEM.source(path).buffer().use { source ->
-          GGUF(GgufSource(source))
-        }
+    @Throws(IOException::class)
+    fun loadModel(modelPath: Path): GGUF {
+      FileChannel.open(modelPath).use { fileChannel ->
+        return loadModel(fileChannel, modelPath.toString())
+      }
+    }
+
+    @Throws(IOException::class)
+    fun loadModel(fileChannel: FileChannel, modelLabel: String): GGUF {
+      Timer.log("Parse $modelLabel").use {
+        fileChannel.position(0L)
+        return GGUF(ChannelReader(fileChannel, PARSE_BUFFER_SIZE))
       }
     }
   }

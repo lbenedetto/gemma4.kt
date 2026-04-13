@@ -1,14 +1,12 @@
 package io.github.lbenedetto.internal.model
 
-import io.github.lbenedetto.internal.data.FloatBuffer
-import io.github.lbenedetto.internal.floattensor.DebugTimer
 import io.github.lbenedetto.internal.floattensor.FloatTensor
-import io.github.lbenedetto.internal.floattensor.parallelFor
-import io.github.lbenedetto.internal.sampler.Sampler
+import io.github.lbenedetto.internal.floattensor.parallelForimport io.github.lbenedetto.internal.sampler.Sampler
 import io.github.lbenedetto.internal.tokenizer.GemmaTokenizer
 import io.github.lbenedetto.internal.tokenizer.GemmaTokenizer.Companion.replaceControlCharacters
 import io.github.lbenedetto.internal.util.printStderr
 import io.github.lbenedetto.internal.util.printlnStderr
+import java.nio.FloatBuffer
 import kotlin.math.*
 import kotlin.time.TimeSource
 
@@ -480,7 +478,6 @@ internal data class Llama(val configuration: LlamaConfiguration, val tokenizer: 
             "generation: $genTps tokens/s (${generatedTokens.size})" +
             "${timingSuffix}\n"
       )
-      DebugTimer.printAndReset()
       return generatedTokens
     }
   }
