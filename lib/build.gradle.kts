@@ -10,12 +10,16 @@ kotlin {
     jvmToolchain(25)
 
     jvm()
-
     macosArm64()
-    macosX64()
     linuxX64()
 
     sourceSets {
+        commonMain {
+            kotlin.srcDir("src/commonMain/kotlin")
+        }
+        nativeMain {
+            kotlin.srcDir("src/nativeMain/kotlin")
+        }
         jvmMain {
             kotlin.srcDir("src/jvmMain/kotlin")
             kotlin.srcDir("src/jvmMain/java")

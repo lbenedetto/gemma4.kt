@@ -6,3 +6,4 @@ build
 
 # Downloaded model files
 models/
+/.kotlin/metadata/
