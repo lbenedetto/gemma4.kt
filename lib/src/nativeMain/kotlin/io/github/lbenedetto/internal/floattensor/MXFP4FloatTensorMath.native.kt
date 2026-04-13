@@ -1,6 +1,6 @@
 package io.github.lbenedetto.internal.floattensor
 
-import ggml.bridge.ggml_bridge_dot_mxfp4_f32_dequant
+import ggml.bridge.ggml_bridge_dot_mxfp4_f32
 import io.github.lbenedetto.internal.floattensor.FloatTensor.Companion.scalarDot
 import io.github.lbenedetto.internal.gguf.GGMLType
 import kotlinx.cinterop.ExperimentalForeignApi
@@ -32,7 +32,7 @@ actual object MXFP4FloatTensorMath {
       val byteOffset = (thisOffset + j).toLong() / blockSize * GGMLType.MXFP4.typeSize
       val quantizedPtr = thiz.memorySegment.rawPointer(byteOffset)
       that.values.usePinned { pinned ->
-        result += ggml_bridge_dot_mxfp4_f32_dequant(fullBlocks, quantizedPtr, pinned.addressOf(thatOffset + j))
+        result += ggml_bridge_dot_mxfp4_f32(fullBlocks, quantizedPtr, pinned.addressOf(thatOffset + j))
       }
       j += fullBlocks
     }

@@ -10,7 +10,7 @@ import kotlin.experimental.ExperimentalNativeApi
 private val NUM_CORES = Platform.getAvailableProcessors().coerceAtLeast(1)
 
 @OptIn(ExperimentalNativeApi::class)
-internal actual fun parallelFor(
+internal actual fun parallelForImpl(
   startInclusive: Int,
   endExclusive: Int,
   action: (Int) -> Unit

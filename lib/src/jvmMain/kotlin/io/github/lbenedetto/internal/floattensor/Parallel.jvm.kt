@@ -2,7 +2,7 @@ package io.github.lbenedetto.internal.floattensor
 
 import java.util.stream.IntStream
 
-internal actual fun parallelFor(
+internal actual fun parallelForImpl(
   startInclusive: Int,
   endExclusive: Int,
   action: (Int) -> Unit
