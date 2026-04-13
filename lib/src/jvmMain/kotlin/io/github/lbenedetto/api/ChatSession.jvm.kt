@@ -8,7 +8,7 @@ import io.github.lbenedetto.internal.model.*
  * The session owns its [LlamaState] and accumulates conversation tokens across
  * calls to [send], so the model always has full context of the prior exchange.
  */
-class ChatSession internal constructor(
+actual class ChatSession internal constructor(
     private val model: Llama,
     private val config: GenerationConfig,
 ) {
@@ -26,13 +26,13 @@ class ChatSession internal constructor(
     }
 
     /** How many context tokens have been consumed so far. */
-    val contextUsed: Int get() = conversationTokens.size
+    actual val contextUsed: Int get() = conversationTokens.size
 
     /** How many context tokens remain before the window is full. */
-    val contextRemaining: Int get() = config.maxTokens - conversationTokens.size
+    actual val contextRemaining: Int get() = config.maxTokens - conversationTokens.size
 
     /** Send [message] and return the model's response. */
-    fun send(message: String): GenerationResult {
+   actual fun send(message: String): GenerationResult {
         if (state == null) state = model.createNewState()
 
         conversationTokens.addAll(chatFormat.encodeMessage(Message(Role.USER, message)))
@@ -66,7 +66,7 @@ class ChatSession internal constructor(
      * Reset the conversation history. The system prompt and all other config settings
      * are preserved; only the accumulated turn history is cleared.
      */
-    fun reset() {
+    actual fun reset() {
         state = null
         conversationTokens.clear()
         startPosition = 0

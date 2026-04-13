@@ -36,15 +36,9 @@ import java.util.random.RandomGeneratorFactory
  * println(model.fillInMiddle(prefix = "fun greet(name: String) = ", suffix = "").text)
  * ```
  */
-class GemmaModel private constructor(private val model: Llama) {
+actual class GemmaModel private constructor(private val model: Llama) {
 
-  /**
-   * Generate a response to [prompt].
-   *
-   * Each call is independent — no conversation state is retained.
-   * For multi-turn exchanges use [chat] instead.
-   */
-  fun generate(prompt: String, configure: GenerationConfig.() -> Unit = {}): GenerationResult =
+  actual fun generate(prompt: String, configure: GenerationConfig.() -> Unit): GenerationResult =
     doGenerate(configure) { config, chatFormat ->
       buildList {
         if (config.thinking) {
@@ -57,12 +51,7 @@ class GemmaModel private constructor(private val model: Llama) {
       }
     }
 
-  /**
-   * Complete a fill-in-the-middle request given a [prefix] and [suffix].
-   *
-   * Requires a model that was trained with FIM support (e.g. Gemma 4 code variants).
-   */
-  fun fillInMiddle(prefix: String, suffix: String, configure: GenerationConfig.() -> Unit = {}): GenerationResult =
+  actual fun fillInMiddle(prefix: String, suffix: String, configure: GenerationConfig.() -> Unit): GenerationResult =
     doGenerate(configure) { _, chatFormat -> chatFormat.encodeFillInTheMiddle(prefix, suffix) }
 
   private fun doGenerate(
@@ -88,13 +77,7 @@ class GemmaModel private constructor(private val model: Llama) {
     return buildResult()
   }
 
-  /**
-   * Create a new multi-turn [ChatSession] with the given configuration.
-   *
-   * The session maintains a [LlamaState] across turns so the model retains
-   * full context of the conversation. Call [ChatSession.reset] to start over.
-   */
-  fun chat(configure: GenerationConfig.() -> Unit = {}): ChatSession {
+  actual fun chat(configure: GenerationConfig.() -> Unit): ChatSession {
     return ChatSession(model, GenerationConfig().apply(configure))
   }
 

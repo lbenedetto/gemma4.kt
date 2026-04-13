@@ -3,7 +3,7 @@ package io.github.lbenedetto.api
 /**
  * Configuration for a generation request.
  *
- * Use the DSL block passed to [GemmaModel.generate], [GemmaModel.fillInMiddle], or [GemmaModel.chat]:
+ * Use the DSL block passed to [io.github.lbenedetto.api.GemmaModel.generate], [io.github.lbenedetto.api.GemmaModel.fillInMiddle], or [io.github.lbenedetto.api.GemmaModel.chat]:
  * ```kotlin
  * model.generate("Tell me a joke") {
  *     temperature = 0.8f
@@ -19,8 +19,8 @@ class GenerationConfig {
     /** Top-p nucleus sampling threshold. 0 or ≥1 disables it. Default: 0.95 */
     var topP: Float = 0.95f
 
-    /** Random seed for reproducibility. Default: random. */
-    var seed: Long = System.nanoTime()
+    /** Random seed for reproducibility. Default: 0. **/
+    var seed: Long = 0
 
     /** Maximum tokens to generate. Negative = capped by context length. Default: 1024 */
     var maxTokens: Int = Config.DEFAULT_MAX_TOKENS
@@ -31,7 +31,7 @@ class GenerationConfig {
     /**
      * Enable thinking mode. When true, the model reasons internally before answering.
      * Thinking tokens are excluded from the streaming [onToken] callback and from
-     * [GenerationResult.text], but available in [GenerationResult.thinking].
+     * [io.github.lbenedetto.api.GenerationResult.text], but available in [io.github.lbenedetto.api.GenerationResult.thinking].
      */
     var thinking: Boolean = false
 
