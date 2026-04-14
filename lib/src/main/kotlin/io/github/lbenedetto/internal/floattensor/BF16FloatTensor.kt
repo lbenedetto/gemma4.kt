@@ -40,7 +40,7 @@ internal class BF16FloatTensor(
       size: Int
     ): Float {
       assert(S_SPECIES_HALF!!.length() == F_SPECIES!!.length())
-      var `val` =
+      var value =
         FloatVector.zero(F_SPECIES)
       val upperBound: Int = F_SPECIES.loopBound(size)
       var i = 0
@@ -56,10 +56,10 @@ internal class BF16FloatTensor(
           .castShape(I_SPECIES!!, 0)
           .lanewise(VectorOperators.LSHL, 16)
           .reinterpretAsFloats()
-        `val` = thizVector.fma(thatVector, `val`)
+        value = thizVector.fma(thatVector, value)
         i += F_SPECIES.length()
       }
-      var result = `val`.reduceLanes(VectorOperators.ADD)
+      var result = value.reduceLanes(VectorOperators.ADD)
       if (upperBound < size) {
         result += scalarDot(
           thiz,

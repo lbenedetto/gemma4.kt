@@ -15,9 +15,9 @@ internal object RoPE {
       var i = 0
       while (i < headSize) {
         val freq = (1.0 / theta.pow(i / headSize.toDouble())).toFloat()
-        val `val` = pos * freq
-        cr[n] = cos(`val`.toDouble()).toFloat()
-        ci[n] = sin(`val`.toDouble()).toFloat()
+        val value = pos * freq
+        cr[n] = cos(value.toDouble()).toFloat()
+        ci[n] = sin(value.toDouble()).toFloat()
         n++
         i += 2
       }
@@ -42,9 +42,9 @@ internal object RoPE {
     for (pos in 0..<contextLength) {
       for (i in 0..<halfHead) {
         val baseFreq = (1.0 / ropeTheta.pow((2.0 * i) / headSize)).toFloat()
-        val `val` = pos * baseFreq / ropeFreqFactors[i]
-        cr[n] = cos(`val`.toDouble()).toFloat()
-        ci[n] = sin(`val`.toDouble()).toFloat()
+        val value = pos * baseFreq / ropeFreqFactors[i]
+        cr[n] = cos(value.toDouble()).toFloat()
+        ci[n] = sin(value.toDouble()).toFloat()
         n++
       }
     }

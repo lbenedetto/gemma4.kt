@@ -65,7 +65,7 @@ internal class Q4_0FloatTensor(
       }
       assert((thisOffset + j) % GGMLType.Q4_0.blockSize == 0)
 
-      var `val` = FloatVector.zero(F_SPECIES!!)
+      var value = FloatVector.zero(F_SPECIES!!)
       var blockOffset = (thisOffset + j).toLong() / GGMLType.Q4_0.blockSize * GGMLType.Q4_0.typeSize
       val upperBound = j + (size - j) / GGMLType.Q4_0.blockSize * GGMLType.Q4_0.blockSize
       while (j < upperBound) {
@@ -87,7 +87,7 @@ internal class Q4_0FloatTensor(
               F_SPECIES,
               thatOffset + j + F_SPECIES.length()
             ).mul(hiBytes.castShape(F_SPECIES, 0))
-            `val` = s0.add(s1).fma(wScale, `val`)
+            value = s0.add(s1).fma(wScale, value)
           }
 
           256 -> {
@@ -105,7 +105,7 @@ internal class Q4_0FloatTensor(
               F_SPECIES,
               thatOffset + j + 3 * F_SPECIES.length()
             ).fma(hiBytes.castShape(F_SPECIES, 1), s1)
-            `val` = s0.add(s1).fma(wScale, `val`)
+            value = s0.add(s1).fma(wScale, value)
           }
 
           128 -> {
@@ -127,7 +127,7 @@ internal class Q4_0FloatTensor(
                 F_SPECIES,
                 thatOffset + j + (i * 4 + 3) * F_SPECIES.length()
               ).fma(tmp.castShape(F_SPECIES, 3), s1)
-              `val` = s0.add(s1).fma(wScale, `val`)
+              value = s0.add(s1).fma(wScale, value)
             }
           }
 
@@ -136,7 +136,7 @@ internal class Q4_0FloatTensor(
         j += GGMLType.Q4_0.blockSize
         blockOffset += GGMLType.Q4_0.typeSize.toLong()
       }
-      result += `val`.reduceLanes(VectorOperators.ADD)
+      result += value.reduceLanes(VectorOperators.ADD)
 
       if (j < size) {
         result += scalarDot(thiz, thisOffset + j, that, thatOffset + j, size - j)
