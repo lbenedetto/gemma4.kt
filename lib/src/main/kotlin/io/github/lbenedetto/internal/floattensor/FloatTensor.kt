@@ -16,12 +16,16 @@ internal interface FloatTensor {
   }
 
   fun matmul(that: FloatTensor, out: MutableFloatTensor, dim0: Int, dim1: Int) {
-    parallelFor(0, dim0) { out.setFloat(it, dot(it * dim1, that, 0, dim1)) }
+    parallelFor(0, dim0) {
+      out.setFloat(it, dot(it * dim1, that, 0, dim1))
+    }
   }
 
   // matmul with offset into this tensor (for expert weight slicing in 3D tensors)
   fun matmul(that: FloatTensor, out: MutableFloatTensor, dim0: Int, dim1: Int, thisOffset: Int) {
-    parallelFor(0, dim0) { out.setFloat(it, dot(thisOffset + it * dim1, that, 0, dim1)) }
+    parallelFor(0, dim0) {
+      out.setFloat(it, dot(thisOffset + it * dim1, that, 0, dim1))
+    }
   }
 
   fun reduce(thisOffset: Int, size: Int, seed: Float, reduce: (Float, Float) -> Float): Float {
@@ -41,10 +45,9 @@ internal interface FloatTensor {
   }
 
   fun copyTo(thisOffset: Int, that: MutableFloatTensor, thatOffset: Int, size: Int) {
-    that.mapWithIndexInPlace(
-      thatOffset,
-      size
-    ) { _, index -> this[index - thatOffset + thisOffset] }
+    that.mapWithIndexInPlace(thatOffset, size) { _, index ->
+      this[index - thatOffset + thisOffset]
+    }
   }
 
   fun argmax(thisOffset: Int, size: Int): Int {

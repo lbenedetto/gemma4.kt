@@ -7,7 +7,6 @@ import io.github.lbenedetto.internal.sampler.Sampler
 import io.github.lbenedetto.internal.tokenizer.GemmaTokenizer
 import io.github.lbenedetto.internal.tokenizer.GemmaTokenizer.Companion.replaceControlCharacters
 import java.nio.FloatBuffer
-import java.util.function.IntConsumer
 import kotlin.math.max
 import kotlin.math.pow
 import kotlin.math.sqrt
@@ -414,7 +413,7 @@ internal data class Llama(val configuration: LlamaConfiguration, val tokenizer: 
       sampler: Sampler,
       echo: Boolean,
       color: Boolean,
-      onTokenGenerated: IntConsumer
+      onTokenGenerated: (Int) -> Unit
     ): MutableList<Int> {
       var maxTokens = maxTokens
       val startNanos = System.nanoTime()
@@ -442,7 +441,7 @@ internal data class Llama(val configuration: LlamaConfiguration, val tokenizer: 
             System.err.print(replaceControlCharacters(model.tokenizer.decode(listOf(nextToken))))
           }
           generatedTokens.add(nextToken)
-          onTokenGenerated.accept(nextToken)
+          onTokenGenerated(nextToken)
           if (stopTokens.contains(nextToken)) {
             break
           }
