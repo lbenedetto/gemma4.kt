@@ -1,5 +1,8 @@
 package io.github.lbenedetto.internal.floattensor
 
+import io.github.lbenedetto.internal.floattensor.FloatTensorHelpers.F_SPECIES
+import io.github.lbenedetto.internal.floattensor.FloatTensorHelpers.USE_VECTOR_API
+import io.github.lbenedetto.internal.floattensor.FloatTensorHelpers.scalarDot
 import jdk.incubator.vector.FloatVector
 import jdk.incubator.vector.VectorOperators
 import jdk.incubator.vector.VectorSpecies
@@ -10,14 +13,10 @@ import java.nio.ByteOrder
 internal class F32FloatTensor(
   override val size: Long,
   private val memorySegment: MemorySegment
-) : FloatTensor() {
+) : FloatTensor {
 
   override fun getFloat(index: Long): Float {
     return memorySegment.get(ValueLayout.JAVA_FLOAT_UNALIGNED, index * Float.SIZE_BYTES)
-  }
-
-  override fun setFloat(index: Int, value: Float) {
-    throw UnsupportedOperationException("read-only")
   }
 
   override fun getFloatVector(species: VectorSpecies<Float>, offset: Int): FloatVector {

@@ -1,6 +1,6 @@
 package io.github.lbenedetto.internal.gguf
 
-import io.github.lbenedetto.internal.floattensor.FloatTensor
+import io.github.lbenedetto.internal.floattensor.FloatTensorHelpers
 import io.github.lbenedetto.internal.util.Timer
 import java.io.IOException
 import java.lang.foreign.Arena
@@ -203,7 +203,7 @@ internal class GGUF private constructor(reader: ChannelReader) {
       val tensorEntries = HashMap.newHashMap<String, GGMLTensorEntry>(tensorInfos.size)
       for (entry in tensorInfos.entries) {
         val ti = entry.value
-        val numberOfElements: Long = FloatTensor.numberOfElementsLong(*ti.dimensions)
+        val numberOfElements: Long = FloatTensorHelpers.numberOfElementsLong(*ti.dimensions)
         val sizeInBytes = ti.ggmlType.byteSizeFor(numberOfElements)
         val memorySegment = tensorData.asSlice(ti.offset, sizeInBytes)
         tensorEntries[ti.name] = GGMLTensorEntry(tensorData, ti.name, ti.ggmlType, ti.dimensions, memorySegment)

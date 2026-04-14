@@ -1,5 +1,10 @@
 package io.github.lbenedetto.internal.floattensor
 
+import io.github.lbenedetto.internal.floattensor.FloatTensorHelpers.F_SPECIES
+import io.github.lbenedetto.internal.floattensor.FloatTensorHelpers.USE_VECTOR_API
+import io.github.lbenedetto.internal.floattensor.FloatTensorHelpers.readByte
+import io.github.lbenedetto.internal.floattensor.FloatTensorHelpers.scalarDot
+import io.github.lbenedetto.internal.floattensor.FloatTensorHelpers.toUnsignedInt
 import io.github.lbenedetto.internal.gguf.GGMLType
 import io.github.lbenedetto.internal.gguf.QK_MXFP4
 import jdk.incubator.vector.ByteVector
@@ -13,11 +18,7 @@ import kotlin.math.min
 internal class MXFP4FloatTensor(
   override val size: Long,
   private val memorySegment: MemorySegment
-) : FloatTensor() {
-
-  override fun setFloat(index: Int, value: Float) {
-    throw UnsupportedOperationException("setFloat")
-  }
+) : FloatTensor {
 
   override fun getFloatVector(species: VectorSpecies<Float>, offset: Int): FloatVector? {
     throw UnsupportedOperationException("getFloatVector")

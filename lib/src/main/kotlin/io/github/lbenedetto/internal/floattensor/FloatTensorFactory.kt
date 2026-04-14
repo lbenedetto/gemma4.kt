@@ -5,7 +5,7 @@ import io.github.lbenedetto.internal.gguf.GGMLType
 
 internal object FloatTensorFactory {
   fun create(ggmlType: GGMLType, entry: GGMLTensorEntry): FloatTensor {
-    val numElements: Long = FloatTensor.numberOfElementsLong(*entry.shape)
+    val numElements: Long = FloatTensorHelpers.numberOfElementsLong(*entry.shape)
     return when (ggmlType) {
       GGMLType.Q8_0 -> Q8_0FloatTensor(numElements, entry.memorySegment)
       GGMLType.Q4_0 -> Q4_0FloatTensor(numElements, entry.memorySegment)

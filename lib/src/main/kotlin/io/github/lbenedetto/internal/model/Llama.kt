@@ -1,6 +1,7 @@
 package io.github.lbenedetto.internal.model
 
 import io.github.lbenedetto.internal.floattensor.FloatTensor
+import io.github.lbenedetto.internal.floattensor.MutableFloatTensor
 import io.github.lbenedetto.internal.floattensor.parallelFor
 import io.github.lbenedetto.internal.sampler.Sampler
 import io.github.lbenedetto.internal.tokenizer.GemmaTokenizer
@@ -24,7 +25,7 @@ internal data class Llama(val configuration: LlamaConfiguration, val tokenizer: 
       return (0.5 * x * (1 + tanh(sqrt(2 / Math.PI) * (x + 0.044715 * x.toDouble().pow(3.0))))).toFloat()
     }
 
-    fun rmsnorm(out: FloatTensor, x: FloatTensor, weight: FloatBuffer, size: Int, rmsNormEps: Float) {
+    fun rmsnorm(out: MutableFloatTensor, x: FloatTensor, weight: FloatBuffer, size: Int, rmsNormEps: Float) {
       var ss = x.reduce(0, size, 0f) { acc, xi -> acc + xi * xi }
       ss /= size.toFloat()
       ss += rmsNormEps
@@ -37,7 +38,7 @@ internal data class Llama(val configuration: LlamaConfiguration, val tokenizer: 
     }
 
     fun rmsnorm(
-      out: FloatTensor,
+      out: MutableFloatTensor,
       outOffset: Int,
       x: FloatTensor,
       xOffset: Int,
@@ -59,7 +60,7 @@ internal data class Llama(val configuration: LlamaConfiguration, val tokenizer: 
     }
 
     // Bare RMS norm without learned weights (just normalize to unit RMS)
-    fun rmsnormNoWeight(out: FloatTensor, outOffset: Int, x: FloatTensor, xOffset: Int, size: Int, rmsNormEps: Float) {
+    fun rmsnormNoWeight(out: MutableFloatTensor, outOffset: Int, x: FloatTensor, xOffset: Int, size: Int, rmsNormEps: Float) {
       var ss = 0f
       for (i in 0..<size) {
         val xi = x.getFloat((xOffset + i).toLong())

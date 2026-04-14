@@ -1,12 +1,15 @@
 package io.github.lbenedetto.internal.floattensor
 
+import io.github.lbenedetto.internal.floattensor.FloatTensorHelpers.F_SPECIES
+import io.github.lbenedetto.internal.floattensor.FloatTensorHelpers.USE_VECTOR_API
+import io.github.lbenedetto.internal.floattensor.FloatTensorHelpers.numberOfElements
+import io.github.lbenedetto.internal.floattensor.FloatTensorHelpers.scalarDot
 import jdk.incubator.vector.FloatVector
 import jdk.incubator.vector.VectorOperators
 import jdk.incubator.vector.VectorSpecies
 import java.nio.FloatBuffer
-import java.util.*
 
-internal class ArrayFloatTensor : FloatTensor {
+internal class ArrayFloatTensor : MutableFloatTensor {
   override val size: Long
   val values: FloatArray
 
@@ -53,7 +56,7 @@ internal class ArrayFloatTensor : FloatTensor {
   }
 
   companion object {
-    fun allocate(vararg dims: Int): FloatTensor {
+    fun allocate(vararg dims: Int): MutableFloatTensor {
       val numberOfElements: Int = numberOfElements(*dims)
       return ArrayFloatTensor(FloatArray(numberOfElements))
     }

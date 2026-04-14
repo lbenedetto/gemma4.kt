@@ -2,6 +2,7 @@ package io.github.lbenedetto.internal.gguf
 
 import io.github.lbenedetto.internal.floattensor.FloatTensor
 import io.github.lbenedetto.internal.floattensor.FloatTensorFactory
+import io.github.lbenedetto.internal.floattensor.FloatTensorHelpers
 import io.github.lbenedetto.internal.model.Llama
 import io.github.lbenedetto.internal.model.LlamaConfiguration
 import io.github.lbenedetto.internal.model.LlamaWeights
@@ -15,7 +16,6 @@ import java.nio.FloatBuffer
 import java.nio.channels.FileChannel
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption
-import java.util.*
 import java.util.function.IntFunction
 
 internal object ModelLoader {
@@ -88,7 +88,7 @@ internal object ModelLoader {
       for (i in 0..<numberOfLayers) {
         val qNorm = tensorInfos["blk.$i.attn_q_norm.weight"]
         if (qNorm != null) {
-          val qNormSize: Long = FloatTensor.numberOfElementsLong(*qNorm.dimensions)
+          val qNormSize: Long = FloatTensorHelpers.numberOfElementsLong(*qNorm.dimensions)
           isSWA[i] = (qNormSize == headSizeSWA.toLong())
         } else {
           isSWA[i] = (i % 5 != 4) // fallback
@@ -205,10 +205,9 @@ internal object ModelLoader {
     }
 
     // Load V weights (nullable: layers without V use K as V)
-    val wv = arrayOfNulls<FloatTensor>(numberOfLayers)
-    for (i in 0..<numberOfLayers) {
-      val vEntry = tensorEntries["blk.$i.attn_v.weight"]
-      wv[i] = if (vEntry != null) loadQuantized(vEntry) else null
+    val wv = Array(numberOfLayers) {
+      val vEntry = tensorEntries["blk.$it.attn_v.weight"]
+      if (vEntry != null) loadQuantized(vEntry) else null
     }
 
     // Load MoE weights (if present)
@@ -253,10 +252,7 @@ internal object ModelLoader {
       FloatBuffer.wrap(ropeFreqsFull.second),
       FloatBuffer.wrap(ropeFreqsSWA.first),
       FloatBuffer.wrap(ropeFreqsSWA.second),
-      if (tensorEntries.containsKey("output.weight"))
-        loadQuantized(tensorEntries["output.weight"]!!)
-      else
-        tokenEmbeddingTable,
+      tensorEntries["output.weight"]?.let { loadQuantized(it) } ?: tokenEmbeddingTable,
       perLayerTokenEmbd, perLayerModelProj, perLayerProjNorm,
       perLayerInpGate, perLayerProj, perLayerPostNorm,
       ffnGateInp, ffnGateInpScale, ffnGateUpExps, ffnDownExps, ffnDownExpsScale,

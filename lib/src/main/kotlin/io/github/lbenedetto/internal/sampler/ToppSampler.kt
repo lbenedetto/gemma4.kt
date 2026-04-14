@@ -1,12 +1,12 @@
 package io.github.lbenedetto.internal.sampler
 
-import io.github.lbenedetto.internal.floattensor.FloatTensor
+import io.github.lbenedetto.internal.floattensor.MutableFloatTensor
 import java.util.random.RandomGenerator
 
 internal class ToppSampler(maxNumberOfElements: Int, val topp: Float, val rng: RandomGenerator) : Sampler {
   val indices: IntArray = IntArray(maxNumberOfElements)
 
-  override fun sampleToken(logits: FloatTensor): Int {
+  override fun sampleToken(logits: MutableFloatTensor): Int {
     val n = Math.toIntExact(logits.size)
     var head = 0
     var tail = n - 1

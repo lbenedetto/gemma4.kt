@@ -1,37 +1,37 @@
 package io.github.lbenedetto.internal.model
 
 import io.github.lbenedetto.internal.floattensor.ArrayFloatTensor
-import io.github.lbenedetto.internal.floattensor.FloatTensor
+import io.github.lbenedetto.internal.floattensor.MutableFloatTensor
 import java.util.stream.IntStream
 
 internal class LlamaState internal constructor(config: LlamaConfiguration) {
-  val x: FloatTensor // activation at current time stamp (embeddingLength,)
-  val xb: FloatTensor // same, but inside a residual branch (embeddingLength,)
-  val xbK: FloatTensor // attention output before wo projection (max queryDim,)
-  val xb2: FloatTensor // an additional buffer (embeddingLength,)
-  val hb: FloatTensor // buffer for hidden dimension in the ffn (maxHiddenDim,)
-  val hb2: FloatTensor // buffer for hidden dimension in the ffn (maxHiddenDim,)
-  val q: FloatTensor // query (max queryDim,)
-  val k: FloatTensor // key (max kvDim,)
-  val v: FloatTensor // value (max kvDim,)
-  val att: FloatTensor // buffer for scores/attention values (n_heads, seq_len)
-  val logits: FloatTensor // output logits
+  val x: MutableFloatTensor // activation at current time stamp (embeddingLength,)
+  val xb: MutableFloatTensor // same, but inside a residual branch (embeddingLength,)
+  val xbK: MutableFloatTensor // attention output before wo projection (max queryDim,)
+  val xb2: MutableFloatTensor // an additional buffer (embeddingLength,)
+  val hb: MutableFloatTensor // buffer for hidden dimension in the ffn (maxHiddenDim,)
+  val hb2: MutableFloatTensor // buffer for hidden dimension in the ffn (maxHiddenDim,)
+  val q: MutableFloatTensor // query (max queryDim,)
+  val k: MutableFloatTensor // key (max kvDim,)
+  val v: MutableFloatTensor // value (max kvDim,)
+  val att: MutableFloatTensor // buffer for scores/attention values (n_heads, seq_len)
+  val logits: MutableFloatTensor // output logits
 
   // kv cache - variable sizes per layer
-  val keyCache: Array<FloatTensor> // (n_layer, seq_len, kvDim_per_layer)
-  val valueCache: Array<FloatTensor> // (n_layer, seq_len, kvDim_per_layer)
+  val keyCache: Array<MutableFloatTensor> // (n_layer, seq_len, kvDim_per_layer)
+  val valueCache: Array<MutableFloatTensor> // (n_layer, seq_len, kvDim_per_layer)
 
   // per-layer embedding buffers
-  val perLayerInputs: FloatTensor?
-  val plGate: FloatTensor?
-  val plProj: FloatTensor?
+  val perLayerInputs: MutableFloatTensor?
+  val plGate: MutableFloatTensor?
+  val plProj: MutableFloatTensor?
 
   // MoE buffers
-  val routerLogits: FloatTensor? // (n_experts,)
-  val moeInput: FloatTensor? // (n_embd,) pre-normed MoE input
-  val moeOutput: FloatTensor? // (n_embd,) accumulated expert output
-  val expertGateUp: FloatTensor? // (2 * expert_ff,)
-  val expertDown: FloatTensor? // (n_embd,) single expert output
+  val routerLogits: MutableFloatTensor? // (n_experts,)
+  val moeInput: MutableFloatTensor? // (n_embd,) pre-normed MoE input
+  val moeOutput: MutableFloatTensor? // (n_embd,) accumulated expert output
+  val expertGateUp: MutableFloatTensor? // (2 * expert_ff,)
+  val expertDown: MutableFloatTensor? // (n_embd,) single expert output
 
   var latestToken: Int = 0
 

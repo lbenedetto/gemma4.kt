@@ -1,5 +1,11 @@
 package io.github.lbenedetto.internal.floattensor
 
+import io.github.lbenedetto.internal.floattensor.FloatTensorHelpers.F_SPECIES
+import io.github.lbenedetto.internal.floattensor.FloatTensorHelpers.I_SPECIES
+import io.github.lbenedetto.internal.floattensor.FloatTensorHelpers.S_SPECIES_HALF
+import io.github.lbenedetto.internal.floattensor.FloatTensorHelpers.USE_VECTOR_API
+import io.github.lbenedetto.internal.floattensor.FloatTensorHelpers.readFloat16
+import io.github.lbenedetto.internal.floattensor.FloatTensorHelpers.scalarDot
 import jdk.incubator.vector.FloatVector
 import jdk.incubator.vector.ShortVector
 import jdk.incubator.vector.VectorOperators
@@ -10,11 +16,7 @@ import java.nio.ByteOrder
 internal class F16FloatTensor(
   override val size: Long,
   val memorySegment: MemorySegment
-) : FloatTensor() {
-
-  override fun setFloat(index: Int, value: Float) {
-    throw UnsupportedOperationException("setFloat")
-  }
+) : FloatTensor {
 
   override fun getFloatVector(species: VectorSpecies<Float>, offset: Int): FloatVector? {
     throw UnsupportedOperationException("getFloatVector")
