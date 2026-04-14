@@ -9,7 +9,6 @@ import io.github.lbenedetto.internal.floattensor.FloatTensorHelpers.toUnsignedIn
 import io.github.lbenedetto.internal.gguf.GGMLType
 import jdk.incubator.vector.FloatVector
 import jdk.incubator.vector.VectorOperators
-import jdk.incubator.vector.VectorSpecies
 import java.lang.foreign.MemorySegment
 import kotlin.math.min
 
@@ -18,11 +17,7 @@ internal class Q5_1FloatTensor(
   private val memorySegment: MemorySegment
 ) : FloatTensor {
 
-  override fun getFloatVector(species: VectorSpecies<Float>, offset: Int): FloatVector? {
-    throw UnsupportedOperationException("getFloatVector")
-  }
-
-  override fun getFloat(index: Long): Float {
+  override fun get(index: Long): Float {
     assert(index in 0..<size)
     val blockIndex = index / GGMLType.Q5_1.blockSize
     val inBlockIndex = (index % GGMLType.Q5_1.blockSize).toInt()
@@ -136,7 +131,7 @@ internal class Q5_1FloatTensor(
     ): Float {
       var result = 0f
       for (i in 0..<size) {
-        result += thiz.getFloat((thisOffset + i).toLong()) * that.values[thatOffset + i]
+        result += thiz[(thisOffset + i).toLong()] * that.values[thatOffset + i]
       }
       return result
     }

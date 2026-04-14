@@ -10,7 +10,6 @@ import io.github.lbenedetto.internal.gguf.QK_MXFP4
 import jdk.incubator.vector.ByteVector
 import jdk.incubator.vector.FloatVector
 import jdk.incubator.vector.VectorOperators
-import jdk.incubator.vector.VectorSpecies
 import java.lang.foreign.MemorySegment
 import java.nio.ByteOrder
 import kotlin.math.min
@@ -20,11 +19,7 @@ internal class MXFP4FloatTensor(
   private val memorySegment: MemorySegment
 ) : FloatTensor {
 
-  override fun getFloatVector(species: VectorSpecies<Float>, offset: Int): FloatVector? {
-    throw UnsupportedOperationException("getFloatVector")
-  }
-
-  override fun getFloat(index: Long): Float {
+  override fun get(index: Long): Float {
     assert(index in 0..<size)
     val blockIndex: Long = index / QK_MXFP4
     val inBlockIndex = (index % QK_MXFP4).toInt()
@@ -206,7 +201,7 @@ internal class MXFP4FloatTensor(
     ): Float {
       var result = 0f
       for (i in 0..<size) {
-        result += thiz.getFloat((thisOffset + i).toLong()) * that.values[thatOffset + i]
+        result += thiz[(thisOffset + i).toLong()] * that.values[thatOffset + i]
       }
       return result
     }

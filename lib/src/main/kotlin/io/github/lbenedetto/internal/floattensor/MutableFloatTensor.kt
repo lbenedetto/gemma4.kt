@@ -8,7 +8,7 @@ internal interface MutableFloatTensor : FloatTensor {
   fun mapInPlace(thisOffset: Int, size: Int, mapFunction: (Float) -> Float): FloatTensor {
     val endIndex = thisOffset + size
     for (i in thisOffset..<endIndex) {
-      setFloat(i, mapFunction(getFloat(i.toLong())))
+      setFloat(i, mapFunction(this[i]))
     }
     return this
   }
@@ -20,7 +20,7 @@ internal interface MutableFloatTensor : FloatTensor {
   fun mapWithIndexInPlace(thisOffset: Int, size: Int, mapWithIndexFunction: (Float, Int) -> Float): FloatTensor {
     val endOffset = thisOffset + size
     for (i in thisOffset..<endOffset) {
-      setFloat(i, mapWithIndexFunction(getFloat(i.toLong()), i))
+      setFloat(i, mapWithIndexFunction(this[i], i))
     }
     return this
   }
@@ -29,7 +29,7 @@ internal interface MutableFloatTensor : FloatTensor {
     return mapWithIndexInPlace(
       thisOffset,
       size
-    ) { value, index -> value + that.getFloat((index - thisOffset + thatOffset).toLong()) }
+    ) { value, index -> value + that[index - thisOffset + thatOffset] }
   }
 
   fun addInPlace(that: FloatTensor): FloatTensor {
@@ -40,7 +40,7 @@ internal interface MutableFloatTensor : FloatTensor {
     return mapWithIndexInPlace(
       thisOffset,
       size
-    ) { value, index -> value * that.getFloat((index - thisOffset + thatOffset).toLong()) }
+    ) { value, index -> value * that[index - thisOffset + thatOffset] }
   }
 
   fun divideInPlace(thisOffset: Int, size: Int, value: Float): FloatTensor {
@@ -60,7 +60,7 @@ internal interface MutableFloatTensor : FloatTensor {
 
   fun saxpyInPlace(thisOffset: Int, that: FloatTensor, thatOffset: Int, size: Int, a: Float): FloatTensor {
     for (i in 0..<size) {
-      setFloat(thisOffset + i, a * that.getFloat((thatOffset + i).toLong()) + this.getFloat((thisOffset + i).toLong()))
+      setFloat(thisOffset + i, a * that[thatOffset + i] + this[thisOffset + i])
     }
     return this
   }

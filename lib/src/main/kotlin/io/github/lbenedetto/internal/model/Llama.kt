@@ -34,7 +34,7 @@ internal data class Llama(val configuration: LlamaConfiguration, val tokenizer: 
       out.mapWithIndexInPlace(
         0,
         size
-      ) { _, index -> weight.get(index) * (finalss * x.getFloat(index.toLong())) }
+      ) { _, index -> weight.get(index) * (finalss * x[index]) }
     }
 
     fun rmsnorm(
@@ -48,14 +48,14 @@ internal data class Llama(val configuration: LlamaConfiguration, val tokenizer: 
     ) {
       var ss = 0f
       for (i in 0..<size) {
-        val xi = x.getFloat((xOffset + i).toLong())
+        val xi = x[xOffset + i]
         ss += xi * xi
       }
       ss /= size.toFloat()
       ss += rmsNormEps
       ss = (1.0 / sqrt(ss.toDouble())).toFloat()
       for (i in 0..<size) {
-        out.setFloat(outOffset + i, weight.get(i) * ss * x.getFloat((xOffset + i).toLong()))
+        out.setFloat(outOffset + i, weight.get(i) * ss * x[xOffset + i])
       }
     }
 
@@ -63,14 +63,14 @@ internal data class Llama(val configuration: LlamaConfiguration, val tokenizer: 
     fun rmsnormNoWeight(out: MutableFloatTensor, outOffset: Int, x: FloatTensor, xOffset: Int, size: Int, rmsNormEps: Float) {
       var ss = 0f
       for (i in 0..<size) {
-        val xi = x.getFloat((xOffset + i).toLong())
+        val xi = x[xOffset + i]
         ss += xi * xi
       }
       ss /= size.toFloat()
       ss += rmsNormEps
       ss = (1.0 / sqrt(ss.toDouble())).toFloat()
       for (i in 0..<size) {
-        out.setFloat(outOffset + i, ss * x.getFloat((xOffset + i).toLong()))
+        out.setFloat(outOffset + i, ss * x[xOffset + i])
       }
     }
 
@@ -106,8 +106,8 @@ internal data class Llama(val configuration: LlamaConfiguration, val tokenizer: 
         // Add per-layer token embedding scaled by sqrt(plDim)
         val tokEmbOffset = token.toLong() * plTotal
         for (i in 0..<plTotal) {
-          val tokEmb = weights.perLayerTokenEmbd.getFloat(tokEmbOffset + i) * sqrtPlDim
-          state.perLayerInputs.setFloat(i, state.perLayerInputs.getFloat(i.toLong()) + tokEmb)
+          val tokEmb = weights.perLayerTokenEmbd[tokEmbOffset + i] * sqrtPlDim
+          state.perLayerInputs.setFloat(i, state.perLayerInputs[i] + tokEmb)
         }
 
         // Scale combined input by 1/sqrt(2)
@@ -142,8 +142,8 @@ internal data class Llama(val configuration: LlamaConfiguration, val tokenizer: 
             val ic = i0 / 2
             val fcr = freqsReal.get(position * halfHead + ic)
             val fci = freqsImag.get(position * halfHead + ic)
-            val v0 = state.q.getFloat((poffset + ic).toLong())
-            val v1 = state.q.getFloat((poffset + ic + halfHead).toLong())
+            val v0 = state.q[poffset + ic]
+            val v1 = state.q[poffset + ic + halfHead]
             state.q.setFloat(poffset + ic, v0 * fcr - v1 * fci)
             state.q.setFloat(poffset + ic + halfHead, v0 * fci + v1 * fcr)
             i0 += 2
@@ -177,8 +177,8 @@ internal data class Llama(val configuration: LlamaConfiguration, val tokenizer: 
               val ic = i0 / 2
               val fcr = freqsReal.get(position * halfHead + ic)
               val fci = freqsImag.get(position * halfHead + ic)
-              val v0 = state.k.getFloat((poffset + ic).toLong())
-              val v1 = state.k.getFloat((poffset + ic + halfHead).toLong())
+              val v0 = state.k[poffset + ic]
+              val v1 = state.k[poffset + ic + halfHead]
               state.k.setFloat(poffset + ic, v0 * fcr - v1 * fci)
               state.k.setFloat(poffset + ic + halfHead, v0 * fci + v1 * fcr)
               i0 += 2
@@ -206,7 +206,7 @@ internal data class Llama(val configuration: LlamaConfiguration, val tokenizer: 
           state.xbK.fillInPlace(xbOffset, headSize, 0f)
           for (t in attStart..position) {
             val vOffset = t * kvDim + (h / kvMul) * headSize
-            val a = state.att.getFloat((attOffset + t).toLong())
+            val a = state.att[attOffset + t]
             state.xbK.saxpyInPlace(xbOffset, state.valueCache[kvLayer], vOffset, headSize, a)
           }
         }
@@ -256,9 +256,7 @@ internal data class Llama(val configuration: LlamaConfiguration, val tokenizer: 
             for (i in 0..<dim) {
               state.xb2.setFloat(
                 i,
-                state.x.getFloat(i.toLong()) * rmsScale * weights.ffnGateInpScale!![l].get(
-                  i
-                )
+                state.x[i] * rmsScale * weights.ffnGateInpScale!![l].get(i)
               )
             }
           }
@@ -277,9 +275,9 @@ internal data class Llama(val configuration: LlamaConfiguration, val tokenizer: 
             var bestIdx = 0
             var bestVal = Float.NEGATIVE_INFINITY
             for (ei in 0..<nExperts) {
-              val `val` = state.routerLogits.getFloat(ei.toLong())
-              if (`val` > bestVal) {
-                bestVal = `val`
+              val value = state.routerLogits[ei]
+              if (value > bestVal) {
+                bestVal = value
                 bestIdx = ei
               }
             }
@@ -313,7 +311,7 @@ internal data class Llama(val configuration: LlamaConfiguration, val tokenizer: 
             for (i in 0..<expertFF) {
               state.expertGateUp.setFloat(
                 i,
-                state.expertGateUp.getFloat(i.toLong()) * state.expertGateUp.getFloat((expertFF + i).toLong())
+                state.expertGateUp[i] * state.expertGateUp[expertFF + i]
               )
             }
 
@@ -367,8 +365,7 @@ internal data class Llama(val configuration: LlamaConfiguration, val tokenizer: 
           for (i in 0..<plDim) {
             state.plGate.setFloat(
               i,
-              state.plGate.getFloat(i.toLong()) * state.perLayerInputs!!
-                .getFloat((plOffset + i).toLong())
+              state.plGate[i] * state.perLayerInputs!![plOffset + i]
             )
           }
           weights.perLayerProj!![l].matmul(

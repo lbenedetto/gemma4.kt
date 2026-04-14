@@ -11,7 +11,6 @@ import io.github.lbenedetto.internal.gguf.QK_K
 import jdk.incubator.vector.ByteVector
 import jdk.incubator.vector.FloatVector
 import jdk.incubator.vector.VectorOperators
-import jdk.incubator.vector.VectorSpecies
 import java.lang.foreign.MemorySegment
 import java.nio.ByteOrder
 import kotlin.math.min
@@ -21,11 +20,7 @@ internal class Q5_KFloatTensor(
   val memorySegment: MemorySegment
 ) : FloatTensor {
 
-  override fun getFloatVector(species: VectorSpecies<Float>, offset: Int): FloatVector? {
-    throw UnsupportedOperationException("getFloatVector")
-  }
-
-  override fun getFloat(index: Long): Float {
+  override fun get(index: Long): Float {
     val blockIndex: Long = index / BLOCK_SIZE
     val withinBlock = (index % BLOCK_SIZE).toInt()
     val blockOffset: Long = blockIndex * TYPE_SIZE

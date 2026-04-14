@@ -12,7 +12,7 @@ internal class ToppSampler(maxNumberOfElements: Int, val topp: Float, val rng: R
     var tail = n - 1
     val cutoff = (1.0f - topp) / (n - 1)
     for (i in indices.indices) {
-      if (logits.getFloat(i.toLong()) >= cutoff) {
+      if (logits[i] >= cutoff) {
         indices[head++] = i
       } else {
         indices[tail--] = i
@@ -20,7 +20,7 @@ internal class ToppSampler(maxNumberOfElements: Int, val topp: Float, val rng: R
     }
 
     val n0 = head
-    val comparator = Comparator.comparing<Int, Float> { logits.getFloat(it.toLong()) }.reversed()
+    val comparator = Comparator.comparing<Int, Float> { logits[it] }.reversed()
     for (i in n0 / 2 - 1 downTo 0) {
       siftDown(indices, i, n0, comparator)
     }
@@ -29,7 +29,7 @@ internal class ToppSampler(maxNumberOfElements: Int, val topp: Float, val rng: R
     var lastIndex = 0
     for (i in n0 - 1 downTo 0) {
       swap(indices, 0, i)
-      cumulativeProb += logits.getFloat(indices[i].toLong())
+      cumulativeProb += logits[indices[i]]
       if (cumulativeProb > topp) {
         lastIndex = i
         break
@@ -40,7 +40,7 @@ internal class ToppSampler(maxNumberOfElements: Int, val topp: Float, val rng: R
     val r = rng.nextFloat(1f) * cumulativeProb
     var cdf = 0.0f
     for (i in n0 - 1 downTo lastIndex) {
-      cdf += logits.getFloat(indices[i].toLong())
+      cdf += logits[indices[i]]
       if (r < cdf) {
         return indices[i]
       }

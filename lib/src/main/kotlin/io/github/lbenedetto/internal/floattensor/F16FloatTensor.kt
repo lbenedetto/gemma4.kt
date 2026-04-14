@@ -9,7 +9,6 @@ import io.github.lbenedetto.internal.floattensor.FloatTensorHelpers.scalarDot
 import jdk.incubator.vector.FloatVector
 import jdk.incubator.vector.ShortVector
 import jdk.incubator.vector.VectorOperators
-import jdk.incubator.vector.VectorSpecies
 import java.lang.foreign.MemorySegment
 import java.nio.ByteOrder
 
@@ -18,11 +17,7 @@ internal class F16FloatTensor(
   val memorySegment: MemorySegment
 ) : FloatTensor {
 
-  override fun getFloatVector(species: VectorSpecies<Float>, offset: Int): FloatVector? {
-    throw UnsupportedOperationException("getFloatVector")
-  }
-
-  override fun getFloat(index: Long): Float {
+  override fun get(index: Long): Float {
     assert(index in 0..<size)
     return readFloat16(memorySegment, index * 2)
   }

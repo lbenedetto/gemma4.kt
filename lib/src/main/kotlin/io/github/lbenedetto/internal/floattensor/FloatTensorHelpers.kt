@@ -65,7 +65,7 @@ internal object FloatTensorHelpers {
   fun scalarDot(thiz: FloatTensor, thisOffset: Int, that: FloatTensor, thatOffset: Int, size: Int): Float {
     var result = 0f
     for (j in 0..<size) {
-      result += thiz.getFloat((thisOffset + j).toLong()) * that.getFloat((thatOffset + j).toLong())
+      result += thiz[thisOffset + j] * that[thatOffset + j]
     }
     return result
   }

@@ -15,11 +15,11 @@ internal class F32FloatTensor(
   private val memorySegment: MemorySegment
 ) : FloatTensor {
 
-  override fun getFloat(index: Long): Float {
+  override fun get(index: Long): Float {
     return memorySegment.get(ValueLayout.JAVA_FLOAT_UNALIGNED, index * Float.SIZE_BYTES)
   }
 
-  override fun getFloatVector(species: VectorSpecies<Float>, offset: Int): FloatVector {
+  fun getFloatVector(species: VectorSpecies<Float>, offset: Int): FloatVector {
     if (!USE_VECTOR_API) {
       throw UnsupportedOperationException()
     }
@@ -59,7 +59,7 @@ internal class F32FloatTensor(
       }
       var result = value.reduceLanes(VectorOperators.ADD)
       for (i in upperBound..<size) {
-        result += thiz.getFloat((thisOffset + i).toLong()) * that.values[thatOffset + i]
+        result += thiz[(thisOffset + i).toLong()] * that.values[thatOffset + i]
       }
       return result
     }

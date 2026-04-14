@@ -9,7 +9,7 @@ internal data class CategoricalSampler(val rng: RandomGenerator) : Sampler {
     val random0to1 = rng.nextFloat(1f)
     var cdf = 0.0f
     for (i in 0..<logits.size) {
-      cdf += logits.getFloat(i)
+      cdf += logits[i]
       if (random0to1 < cdf) {
         // TODO: Figure out why logits.size is Long but we use the index as an Int to convert to a token
         return i.toInt()

@@ -25,7 +25,7 @@ internal class ArrayFloatTensor : MutableFloatTensor {
     buf.rewind()
   }
 
-  override fun getFloat(index: Long): Float {
+  override fun get(index: Long): Float {
     return values[Math.toIntExact(index)]
   }
 
@@ -38,7 +38,7 @@ internal class ArrayFloatTensor : MutableFloatTensor {
     return this
   }
 
-  override fun getFloatVector(species: VectorSpecies<Float>, offset: Int): FloatVector {
+  fun getFloatVector(species: VectorSpecies<Float>, offset: Int): FloatVector {
     if (!USE_VECTOR_API) {
       throw UnsupportedOperationException()
     }

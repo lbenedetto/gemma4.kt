@@ -1,15 +1,15 @@
 package io.github.lbenedetto.internal.floattensor
 
 import io.github.lbenedetto.internal.floattensor.FloatTensorHelpers.scalarDot
-import jdk.incubator.vector.FloatVector
-import jdk.incubator.vector.VectorSpecies
 
 internal interface FloatTensor {
   val size: Long
 
-  fun getFloat(index: Long): Float
+  operator fun get(index: Long): Float
 
-  fun getFloatVector(species: VectorSpecies<Float>, offset: Int): FloatVector?
+  operator fun get(index: Int): Float {
+    return get(index.toLong())
+  }
 
   fun dot(thisOffset: Int, that: FloatTensor, thatOffset: Int, size: Int): Float {
     return scalarDot(this, thisOffset, that, thatOffset, size)
@@ -27,7 +27,7 @@ internal interface FloatTensor {
   fun reduce(thisOffset: Int, size: Int, seed: Float, reduce: (Float, Float) -> Float): Float {
     var result = seed
     for (i in 0..<size) {
-      result = reduce(result, getFloat((thisOffset + i).toLong()))
+      result = reduce(result, this[thisOffset + i])
     }
     return result
   }
@@ -44,16 +44,16 @@ internal interface FloatTensor {
     that.mapWithIndexInPlace(
       thatOffset,
       size
-    ) { _, index -> this.getFloat((index - thatOffset + thisOffset).toLong()) }
+    ) { _, index -> this[index - thatOffset + thisOffset] }
   }
 
   fun argmax(thisOffset: Int, size: Int): Int {
     assert(size > 0)
     var maxIndex = thisOffset
-    var maxValue = this.getFloat(maxIndex.toLong())
+    var maxValue = this[maxIndex]
     val endIndex = thisOffset + size
     for (i in thisOffset..<endIndex) {
-      val f = this.getFloat(i.toLong())
+      val f = this[i]
       if (f > maxValue) {
         maxValue = f
         maxIndex = i
