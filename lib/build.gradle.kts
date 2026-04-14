@@ -1,54 +1,24 @@
 plugins {
-    alias(libs.plugins.kotlin.multiplatform)
+    alias(libs.plugins.kotlin.jvm)
 }
 
 repositories {
     mavenCentral()
 }
 
-kotlin {
-    jvmToolchain(25)
+dependencies {
+    testImplementation(libs.kotest.runner.junit5)
+    testImplementation(libs.kotest.assertions.core)
+}
 
-    jvm()
-    macosArm64 {
-        compilations["main"].cinterops {
-            val llama by creating {
-                defFile(file("src/nativeInterop/cinterop/llama.def"))
-                packageName("llama")
-            }
-        }
-    }
-    linuxX64 {
-        compilations["main"].cinterops {
-            val llama by creating {
-                defFile(file("src/nativeInterop/cinterop/llama.def"))
-                packageName("llama")
-            }
-        }
-    }
+tasks.test {
+    useJUnitPlatform()
+    jvmArgs("--add-modules=jdk.incubator.vector", "-Xmx16g")
+}
 
-    compilerOptions {
-        freeCompilerArgs.add("-Xexpect-actual-classes")
-    }
-
-    sourceSets {
-        commonMain {
-            kotlin.srcDir("src/commonMain/kotlin")
-        }
-        nativeMain {
-            kotlin.srcDir("src/nativeMain/kotlin")
-        }
-        jvmMain {
-            kotlin.srcDir("src/jvmMain/kotlin")
-            kotlin.srcDir("src/jvmMain/java")
-        }
-        jvmTest {
-            kotlin.srcDir("src/jvmTest/kotlin")
-            dependencies {
-                implementation(libs.kotest.runner.junit5)
-                implementation(libs.kotest.assertions.core)
-            }
-        }
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(25)
     }
 }
 
@@ -56,16 +26,11 @@ tasks.withType<JavaCompile>().configureEach {
     options.compilerArgs.add("--add-modules=jdk.incubator.vector")
 }
 
-tasks.named<JavaCompile>("compileJvmMainJava") {
-    val kotlinCompile = tasks.named<org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile>("compileKotlinJvm")
+tasks.named<JavaCompile>("compileJava") {
+    val kotlinCompile = tasks.named<org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile>("compileKotlin")
     dependsOn(kotlinCompile)
     val kotlinOutputDir = kotlinCompile.flatMap { it.destinationDirectory }
-    options.compilerArgumentProviders.add(CommandLineArgumentProvider {
+    options.compilerArgumentProviders.add(org.gradle.process.CommandLineArgumentProvider {
         listOf("--patch-module", "io.github.lbenedetto.gemma4kt=${kotlinOutputDir.get().asFile}")
     })
-}
-
-tasks.named<Test>("jvmTest") {
-    useJUnitPlatform()
-    jvmArgs("--add-modules=jdk.incubator.vector", "-Xmx16g")
 }

@@ -1,5 +1,0 @@
-headers = llama.h
-package = llama
-
-compilerOpts = -I/opt/homebrew/include
-linkerOpts = -L/opt/homebrew/lib -lllama -lggml -lggml-base -lggml-cpu
