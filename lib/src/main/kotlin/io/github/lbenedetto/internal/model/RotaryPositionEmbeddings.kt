@@ -4,7 +4,7 @@ import kotlin.math.cos
 import kotlin.math.pow
 import kotlin.math.sin
 
-internal object RoPE {
+internal object RotaryPositionEmbeddings {
   fun precomputeFreqsCis(contextLength: Int, headSize: Int, theta: Double): Pair<FloatArray, FloatArray> {
     assert(headSize % 2 == 0)
     val halfHead = headSize / 2

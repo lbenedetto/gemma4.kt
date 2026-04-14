@@ -6,7 +6,7 @@ import io.github.lbenedetto.internal.floattensor.FloatTensorHelpers
 import io.github.lbenedetto.internal.model.Llama
 import io.github.lbenedetto.internal.model.LlamaConfiguration
 import io.github.lbenedetto.internal.model.LlamaWeights
-import io.github.lbenedetto.internal.model.RoPE
+import io.github.lbenedetto.internal.model.RotaryPositionEmbeddings
 import io.github.lbenedetto.internal.tokenizer.GemmaTokenizer
 import io.github.lbenedetto.internal.tokenizer.Vocabulary
 import io.github.lbenedetto.internal.util.Timer
@@ -152,11 +152,11 @@ internal object ModelLoader {
   }
 
   fun loadWeights(tensorEntries: Map<String, GGMLTensorEntry>, config: LlamaConfiguration): LlamaWeights {
-    val ropeFreqsSWA = RoPE.precomputeFreqsCis(config.contextLength, config.headSizeSWA, config.ropeThetaSWA.toDouble())
+    val ropeFreqsSWA = RotaryPositionEmbeddings.precomputeFreqsCis(config.contextLength, config.headSizeSWA, config.ropeThetaSWA.toDouble())
     val ropeFreqsBuf = toFloatBuffer(tensorEntries["rope_freqs.weight"]!!)
     val modelRopeFreqs = FloatArray(ropeFreqsBuf.remaining())
     ropeFreqsBuf.get(modelRopeFreqs)
-    val ropeFreqsFull = RoPE.precomputeFreqsCisFromFreqs(
+    val ropeFreqsFull = RotaryPositionEmbeddings.precomputeFreqsCisFromFreqs(
       config.contextLength,
       config.headSizeFull,
       config.ropeTheta.toDouble(),

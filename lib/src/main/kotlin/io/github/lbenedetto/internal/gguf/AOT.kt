@@ -2,7 +2,7 @@ package io.github.lbenedetto.internal.gguf
 
 import io.github.lbenedetto.api.Config.DEFAULT_MAX_TOKENS
 import io.github.lbenedetto.internal.model.Llama
-import io.github.lbenedetto.internal.model.RoPE
+import io.github.lbenedetto.internal.model.RotaryPositionEmbeddings
 import io.github.lbenedetto.internal.util.Timer
 import java.io.IOException
 import java.nio.channels.FileChannel
@@ -25,7 +25,7 @@ internal object AOT {
         val base = ModelLoader.loadModel(null, gguf, DEFAULT_MAX_TOKENS, false)
         // Precompute RoPE frequencies at build time (pure Java arrays, survives native-image)
         val config = base.configuration
-        val ropeFreqsSWA = RoPE.precomputeFreqsCis(
+        val ropeFreqsSWA = RotaryPositionEmbeddings.precomputeFreqsCis(
           contextLength = config.contextLength,
           headSize = config.headSizeSWA,
           theta = config.ropeThetaSWA.toDouble()
@@ -35,7 +35,7 @@ internal object AOT {
         val ropeFreqsBuf = ModelLoader.toFloatBuffer(tmpEntries["rope_freqs.weight"]!!)
         val modelRopeFreqs = FloatArray(ropeFreqsBuf.remaining())
         ropeFreqsBuf.get(modelRopeFreqs)
-        val ropeFreqsFull = RoPE.precomputeFreqsCisFromFreqs(
+        val ropeFreqsFull = RotaryPositionEmbeddings.precomputeFreqsCisFromFreqs(
           contextLength = config.contextLength,
           headSize = config.headSizeFull,
           ropeTheta = config.ropeTheta.toDouble(),

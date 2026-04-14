@@ -59,7 +59,14 @@ internal data class Llama(val configuration: LlamaConfiguration, val tokenizer: 
     }
 
     // Bare RMS norm without learned weights (just normalize to unit RMS)
-    fun rmsnormNoWeight(out: MutableFloatTensor, outOffset: Int, x: FloatTensor, xOffset: Int, size: Int, rmsNormEps: Float) {
+    fun rmsnormNoWeight(
+      out: MutableFloatTensor,
+      outOffset: Int,
+      x: FloatTensor,
+      xOffset: Int,
+      size: Int,
+      rmsNormEps: Float
+    ) {
       var ss = 0f
       for (i in 0..<size) {
         val xi = x[xOffset + i]
@@ -70,6 +77,28 @@ internal data class Llama(val configuration: LlamaConfiguration, val tokenizer: 
       ss = (1.0 / sqrt(ss.toDouble())).toFloat()
       for (i in 0..<size) {
         out.setFloat(outOffset + i, ss * x[xOffset + i])
+      }
+    }
+
+    fun MutableFloatTensor.rotaryPositionEmbeddings(
+      h: Int,
+      headSize: Int,
+      freqsReal: FloatBuffer,
+      freqsImag: FloatBuffer,
+      position: Int,
+      halfHead: Int
+    ) {
+      val poffset = h * headSize
+      var i0 = 0
+      while (i0 < headSize) {
+        val ic = i0 / 2
+        val fcr = freqsReal[position * halfHead + ic]
+        val fci = freqsImag[position * halfHead + ic]
+        val v0 = this[poffset + ic]
+        val v1 = this[poffset + ic + halfHead]
+        this.setFloat(poffset + ic, v0 * fcr - v1 * fci)
+        this.setFloat(poffset + ic + halfHead, v0 * fci + v1 * fcr)
+        i0 += 2
       }
     }
 
@@ -135,18 +164,7 @@ internal data class Llama(val configuration: LlamaConfiguration, val tokenizer: 
         val freqsReal = if (layerIsSWA) weights.freqCisRealSwa else weights.freqCisRealFull
         val freqsImag = if (layerIsSWA) weights.freqCisImagSwa else weights.freqCisImagFull
         for (h in 0..<config.numberOfHeads) {
-          val poffset = h * headSize
-          var i0 = 0
-          while (i0 < headSize) {
-            val ic = i0 / 2
-            val fcr = freqsReal.get(position * halfHead + ic)
-            val fci = freqsImag.get(position * halfHead + ic)
-            val v0 = state.q[poffset + ic]
-            val v1 = state.q[poffset + ic + halfHead]
-            state.q.setFloat(poffset + ic, v0 * fcr - v1 * fci)
-            state.q.setFloat(poffset + ic + halfHead, v0 * fci + v1 * fcr)
-            i0 += 2
-          }
+          state.q.rotaryPositionEmbeddings(h, headSize, freqsReal, freqsImag, position, halfHead)
         }
 
         // KV projection (shared KV: later layers reuse earlier layer's cache)
@@ -170,18 +188,7 @@ internal data class Llama(val configuration: LlamaConfiguration, val tokenizer: 
 
           // RoPE for K
           for (h in 0..<nKvHeads) {
-            val poffset = h * headSize
-            var i0 = 0
-            while (i0 < headSize) {
-              val ic = i0 / 2
-              val fcr = freqsReal.get(position * halfHead + ic)
-              val fci = freqsImag.get(position * halfHead + ic)
-              val v0 = state.k[poffset + ic]
-              val v1 = state.k[poffset + ic + halfHead]
-              state.k.setFloat(poffset + ic, v0 * fcr - v1 * fci)
-              state.k.setFloat(poffset + ic + halfHead, v0 * fci + v1 * fcr)
-              i0 += 2
-            }
+            state.k.rotaryPositionEmbeddings(h, headSize, freqsReal, freqsImag, position, halfHead)
           }
 
           state.k.copyTo(0, state.keyCache[kvLayer], position * kvDim, kvDim)
