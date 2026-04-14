@@ -10,8 +10,22 @@ kotlin {
     jvmToolchain(25)
 
     jvm()
-    macosArm64()
-    linuxX64()
+    macosArm64 {
+        compilations["main"].cinterops {
+            val llama by creating {
+                defFile(file("src/nativeInterop/cinterop/llama.def"))
+                packageName("llama")
+            }
+        }
+    }
+    linuxX64 {
+        compilations["main"].cinterops {
+            val llama by creating {
+                defFile(file("src/nativeInterop/cinterop/llama.def"))
+                packageName("llama")
+            }
+        }
+    }
 
     compilerOptions {
         freeCompilerArgs.add("-Xexpect-actual-classes")
